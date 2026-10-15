@@ -79,7 +79,7 @@ Duplicate handlingName entries produce an error instead of silently overwriting 
 Duck Workshop and [Duck Studio](https://github.com/Rubber-Ducks-Development/duck-studios)
 share their desktop design language and ordinary image files. Workshop edits vehicle
 assets; Studio builds clothing collections. Their workspace formats are independent:
-`.duckworkshop` and Studio's `.duck` cannot be opened interchangeably. Workshop
+`.duckworkshop` and Studio's `.duckproj` cannot be opened interchangeably. Workshop
 does not import Studio's native YDD clothing models or YTD dictionaries. For a shared
 texture workflow, export PNG from Studio, edit or inspect it in Workshop, and replace
 the texture in Studio with the saved PNG. Workshop's transparent stripe PNGs can also

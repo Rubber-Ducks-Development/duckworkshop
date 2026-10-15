@@ -1,6 +1,6 @@
 # Duck Studio and Duck Workshop compatibility
 
-Reviewed against the local Duck Studio 2.1.2 source and desktop editor, October 14,
+Reviewed against the local Duck Studio 2.1.3 source (project format migration) and the 2.1.2 desktop UI, October 15,
 2026. The apps are companion tools for different GTA V/FiveM asset workflows.
 
 | Area | Compatibility | Workflow or limit |
@@ -13,7 +13,7 @@ Reviewed against the local Duck Studio 2.1.2 source and desktop editor, October 
 | DDS images | Partial | Workshop decodes DXT1/3/5; Studio can produce additional DDS formats. PNG is the dependable interchange path |
 | Native models | Different scope | Workshop reads legacy PC YFT/YDR; Studio edits clothing YDD. Workshop does not read YDD/YTD |
 | CodeWalker XML | Format dependent | Workshop supports drawable/fragment mesh XML. Studio's exported clothing dictionary XML is not an advertised direct import path |
-| Saved workspaces | Separate | `.duckworkshop` and `.duck` use different schemas and cannot open one another |
+| Saved workspaces | Separate | `.duckworkshop` and `.duckproj` use different schemas and cannot open one another |
 | FiveM resources | Complementary | Workshop creates vehicle metadata/resources; Studio creates clothing/tattoo resources. Deploy as separate resources with unique names |
 | Updates | Matching behavior, independent trust | Both check on startup/every six hours and verify RSA-PSS/SHA256. Keys, product IDs, packages and feeds stay independent |
 

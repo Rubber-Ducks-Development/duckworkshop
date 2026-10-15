@@ -97,7 +97,7 @@ maintainer-provided local package.
 
 | Type | Support and limits |
 | --- | --- |
-| `.duckworkshop` | Native workspace with editor data, imported geometry and links to external textures. Not interchangeable with Studio's `.duck`. |
+| `.duckworkshop` | Native workspace with editor data, imported geometry and links to external textures. Not interchangeable with Studio's `.duckproj`. |
 | Legacy PC `.yft` / `.ydr` | RSC7 YFT version 159 and YDR version 165, including supported fragment drawables. Enhanced/Gen9, encrypted resources and unsupported vertex layouts need another supported conversion path. |
 | CodeWalker XML / mapped OBJ / self-contained GLB | Recover existing UVs and mesh data. Complete finite UVs are required; no FBX, external GLB buffers, OBJ MTL loading or unwrapping. |
 | PNG, JPG, PSD, DDS, TGA, BMP, TIFF, WebP, GIF | Texture preview. PSD favors the saved merged image; PSB/CMYK/32-bit PSD are unsupported. DDS support covers DXT1/3/5. Images are limited to 1 GB and 16384 pixels per side. |
@@ -198,7 +198,7 @@ Two companion workspaces with a shared visual language and different production 
 
 | App | What it is for | Workspace | Source and downloads |
 | --- | --- | --- | --- |
-| **Duck Studio** | Clothing collections, tattoos, outfits, texture workflows and pack builds | `.duck` | [Repository](https://github.com/Rubber-Ducks-Development/duck-studios) · [Releases](https://github.com/Rubber-Ducks-Development/duck-studios/releases) |
+| **Duck Studio** | Clothing collections, tattoos, outfits, texture workflows and pack builds | `.duckproj` | [Repository](https://github.com/Rubber-Ducks-Development/duck-studios) · [Releases](https://github.com/Rubber-Ducks-Development/duck-studios/releases) |
 | **Duck Workshop** | Vehicle UVs, light patterns, warning textures, metadata and handling comparison | `.duckworkshop` | [Repository](https://github.com/Rubber-Ducks-Development/duckworkshop) · [Releases](https://github.com/Rubber-Ducks-Development/duckworkshop/releases) |
 
 **Share images, keep projects separate.** Export a texture as PNG from Studio, inspect
