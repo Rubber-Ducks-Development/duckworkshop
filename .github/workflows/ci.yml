@@ -1,0 +1,25 @@
+name: Windows build and tests
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  workshop:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Install stable Rust
+        run: rustup update stable --no-self-update
+      - name: Check formatting
+        run: cargo +stable fmt --all -- --check
+      - name: Test formats, projects and update verification
+        run: cargo +stable test --all-targets --locked
+      - name: Check Clippy
+        run: cargo +stable clippy --all-targets --locked -- -D warnings
+      - name: Build Windows release
+        run: cargo +stable build --release --locked

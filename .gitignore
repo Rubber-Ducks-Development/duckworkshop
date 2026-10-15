@@ -1,0 +1,9 @@
+/target/
+/release/
+*.log
+*.private.pem
+*.pfx
+*.p12
+/release-signing/
+/.duck-workshop-update-*/
+Duck-Workshop.exe
