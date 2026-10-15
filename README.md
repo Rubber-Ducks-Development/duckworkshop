@@ -1,179 +1,230 @@
-<img src="assets/duck-workshop.png" width="112" alt="Duck Workshop firefighter duck logo">
+<p align="center">
+  <img src="assets/duck-workshop.png" alt="Duck Workshop firefighter duck logo" width="144">
+</p>
 
-# Duck Workshop
+<h1 align="center">Duck Workshop</h1>
 
-A free, open-source, native Rust workbench for FiveM vehicle creators. MIT licensed.
-All five tools process files locally. No login, subscription, API keys, telemetry,
-cloud converters, or browser runtime is required. Optional signed update checks use
-the internet and can be disabled under Help > Update settings.
+<p align="center">
+  <b>Build the details that make a FiveM vehicle your own.</b><br>
+  A native Windows workbench for UVs, light sequences, warning textures, metadata and handling comparisons.<br>
+  Free, open source, and maintained by Rubber Ducks Development.
+</p>
 
-[Download releases](https://github.com/Rubber-Ducks-Development/duckworkshop/releases)
-or [report an issue](https://github.com/Rubber-Ducks-Development/duckworkshop/issues).
-Release downloads become available when the repository and its release assets are public.
+<p align="center">
+  <img src="https://img.shields.io/badge/platform-Windows%20x64-0078D4?style=flat-square" alt="Platform: Windows x64">
+  <img src="https://img.shields.io/badge/built%20with-Rust-D7B974?style=flat-square" alt="Built with Rust">
+  <img src="https://img.shields.io/badge/source-0.3.0-555555?style=flat-square" alt="Source version 0.3.0">
+  <img src="https://img.shields.io/badge/license-MIT-3A3A3A?style=flat-square" alt="License: MIT; third-party notices apply">
+</p>
 
-## Run
+<p align="center">
+  <a href="#get-started"><b>Get started</b></a> ·
+  <a href="#screenshots">Screenshots</a> ·
+  <a href="#features">Features</a> ·
+  <a href="#file-support">File support</a> ·
+  <a href="#build-from-source">Build from source</a> ·
+  <a href="#documentation">Documentation</a>
+</p>
 
-Open `Duck-Workshop.exe` on Windows. No installer or administrator rights
-are required. The app and executable use the supplied firefighter duck artwork.
-Update manifests carry an RSA-PSS-SHA256 signature; the executable does not currently
-carry a Windows Authenticode publisher certificate.
+> [!NOTE]
+> **Release preparation.** The source is 0.3.0; the Windows release is currently a draft and the repository is private. [GitHub Releases](https://github.com/Rubber-Ducks-Development/duckworkshop/releases) will provide downloads once published and accessible. The tools process files locally; only optional update checks use the internet.
 
-To build from source, install a current stable Rust toolchain and the Visual Studio
-C++ build tools on Windows, then run in this folder:
+<p align="center">
+  <img src="docs/images/lightboard.png" alt="Duck Workshop Lightboard with eight demonstration red and blue light channels in the 32-step sequencer" width="100%">
+  <br>
+  <sub>The real Lightboard with an eight-channel demonstration pattern. The schematic preview is not an in-game lighting simulation.</sub>
+</p>
+
+<table>
+  <tr>
+    <td width="25%" valign="top"><h3>Models and UVs</h3>Recover existing UVs, inspect textures in 3D and export templates for your artwork.</td>
+    <td width="25%" valign="top"><h3>Light sequences</h3>Paint 32-step patterns, preview timing and export carcols siren settings.</td>
+    <td width="25%" valign="top"><h3>Warning textures</h3>Build transparent chevrons or stripes with precise dimensions, colors and UV masks.</td>
+    <td width="25%" valign="top"><h3>Vehicle metadata</h3>Edit vehicle XML and compare handling values while preserving unrelated fields.</td>
+  </tr>
+</table>
+
+## Screenshots
+
+<p align="center">
+  <img src="docs/images/stripes.png" alt="Duck Workshop Stripe Designer with a red and yellow chevron preview and controls for dimensions, angle, width, offset and opacity" width="100%">
+  <br>
+  <sub>Stripe Designer with a demonstration chevron. The checkerboard shows the canvas; exported PNGs preserve the selected pattern and transparency.</sub>
+</p>
+
+These are captures of the actual egui interface with original demonstration values.
+No vehicle models or private workspaces are shown. See [image sources](docs/images/SOURCES.md).
+
+## Features
+
+| Tool | What you can do |
+| --- | --- |
+| UV Editor | Import a supported mapped model, select meshes/LOD/UV channel, inspect per-material textures in 3D, and export PNG/SVG templates or material PNGs in a ZIP. |
+| Live textures | Load PNG, JPG, PSD, DDS and other supported images. Linked textures reload after a stable save, so artwork changes appear while you keep painting in another editor. |
+| Lightboard | Paint or erase a 32-step sequencer, add up to six colors per light, undo/redo, invert, shift, copy and preview timing. Import/export carcols and retain unrelated XML. |
+| Stripe Designer | Create symmetric chevrons or diagonal stripes, set colors/dimensions/angle/opacity and export transparent PNGs up to 8192 pixels per dimension. Clip to the current UV selection when a model is loaded. |
+| Meta Editor | Edit handling, vehicles, carvariations and carcols files. Choose entries, use guided fields or raw XML, validate changes and export individual files or a resource ZIP. |
+| Handling Compare | Match handling entries by name, filter changes and export CSV/JSON. Exact decimal-string comparison catches differences below floating-point precision. |
+| Complete workspaces | Save geometry, patterns, metadata, comparison inputs and texture links in a `.duckworkshop` file. Source texture images remain in their existing locations. |
+| Signed updates | Check on startup/every six hours or on demand; verify the release and download, save before restarting, and retain the old executable for recovery. |
+
+Read the [user guide](docs/USER-GUIDE.md) for tool controls and detailed format limits.
+
+## Get started
+
+**Requirements:** Windows x64. The portable native application does not require a
+browser runtime, account, subscription or API key. Editing and export work offline.
+
+1. When available, download the Windows x64 ZIP from
+   [GitHub Releases](https://github.com/Rubber-Ducks-Development/duckworkshop/releases).
+2. Extract the package to a writable folder and run `Duck-Workshop.exe`.
+3. Choose one of the five tools. Import your own supported files, or create a light
+   pattern, warning texture or metadata template.
+4. Use **Project > Save** to keep a complete workspace before closing or updating.
+
+| Download | Use it when |
+| --- | --- |
+| `Duck-Workshop-<version>-Windows-x64.zip` | You want the portable app with documentation and license notices. |
+| `Duck-Workshop.exe` | You want the standalone portable executable. |
+| `SHA256SUMS.txt` | You want to compare the download's SHA256 with the published checksums. |
+| `latest.json` | You maintain the update feed; the app reads this signed manifest automatically. |
+
+No installer or administrator rights are required. Private or draft release assets
+cannot be downloaded anonymously; until publication, build from source or use the
+maintainer-provided local package.
+
+## File support
+
+| Type | Support and limits |
+| --- | --- |
+| `.duckworkshop` | Native workspace with editor data, imported geometry and links to external textures. Not interchangeable with Studio's `.weftproj`. |
+| Legacy PC `.yft` / `.ydr` | RSC7 YFT version 159 and YDR version 165, including supported fragment drawables. Enhanced/Gen9, encrypted resources and unsupported vertex layouts need another supported conversion path. |
+| CodeWalker XML / mapped OBJ / self-contained GLB | Recover existing UVs and mesh data. Complete finite UVs are required; no FBX, external GLB buffers, OBJ MTL loading or unwrapping. |
+| PNG, JPG, PSD, DDS, TGA, BMP, TIFF, WebP, GIF | Texture preview. PSD favors the saved merged image; PSB/CMYK/32-bit PSD are unsupported. DDS support covers DXT1/3/5. Images are limited to 1 GB and 16384 pixels per side. |
+| Vehicle `.meta` XML | Handling, vehicles, carvariations and carcols; nested and unknown elements are retained by the preserving XML workflow. |
+| PNG / SVG / ZIP / CSV / JSON | Tool-specific exports for UV templates, patterns, resource bundles and handling comparisons. |
+
+The 3D viewer is a texture check, rather than an in-game render. UV recovery does
+not unwrap or modify the source model. Binary/XML previews use raw mesh positions;
+skeletal transforms and native game lighting are not simulated. UV exports cover
+the 0-1 tile. No YDD clothing or YTD dictionary import is provided.
+
+Each color of a Lightboard light exports as its own siren because carcols permits
+one color per siren. The total exported setting supports up to 32 sirens. Check bone
+placement, timing and behavior on your actual target vehicle.
+
+## Workflow
+
+1. **Inspect the model.** Import a mapped model, choose meshes/LOD/channel and load its textures.
+2. **Prepare the artwork.** Export a UV template or warning texture; linked images refresh after saves.
+3. **Build the light pattern.** Paint the sequencer, inspect the preview and export or merge carcols.
+4. **Review the metadata.** Edit the vehicle files, link model/handling/siren IDs, and compare handling changes.
+5. **Save and test.** Keep the `.duckworkshop` file, add your actual YFT/YTD assets to the exported resource, and test in FiveM.
+
+New workspaces start without demonstration models or sample metadata. The patterns
+shown in the screenshots were supplied only for documentation captures.
+
+## Build from source
+
+Use stable Rust **1.88 or newer** and the Visual Studio C++ build tools/Windows SDK
+on Windows. Cargo downloads the open-source dependencies for the first build.
 
 ```powershell
+git clone https://github.com/Rubber-Ducks-Development/duckworkshop.git
+cd duckworkshop
 cargo run --locked
-cargo test --locked
+```
+
+Checks and an optimized build:
+
+```powershell
+cargo fmt --all -- --check
+cargo test --all-targets --locked
 cargo clippy --all-targets --locked -- -D warnings
 cargo build --release --locked
 ```
 
-The resulting executable is `target/release/duck-workshop.exe`. Cargo downloads
-open-source crates on the first build. Runtime processing needs no internet connection.
+The executable is `target/release/duck-workshop.exe`.
 
-## Tools
+| Folder or module | Purpose |
+| --- | --- |
+| `src/ui.rs` and `src/ui/` | Native workbench, theme, sequencer and OpenGL preview |
+| `src/models.rs`, `src/textures.rs`, `src/render.rs` | Model import, texture decoding, UV and stripe output |
+| `src/patterns.rs`, `src/meta.rs`, `src/diff.rs` | Light patterns, preserving XML edits and handling comparison |
+| `src/updates.rs` and `scripts/` | Verified portable updates and release signing |
+| `tests/` | Original synthetic format, texture, project and update fixtures |
+| `docs/` | User guide, compatibility, validation and dependency notices |
 
-**UV Editor:** Import a model from legacy PC `.yft` / `.ydr`, CodeWalker `.xml`, mapped
-`.obj`, or a self-contained `.glb`, then load a texture (PNG, JPG, PSD, DDS, TGA, BMP,
-TIFF, WebP or GIF) to see it on the model in a GPU-rendered 3D preview. Drag to rotate,
-right-drag or Shift+drag to move, scroll to zoom, double-click to fit, or use the
-Front / Back / Left / Right / Top views. Each material can show its own texture.
-Texture files are watched: every time one is saved again (for example from Photoshop)
-the model updates within about a second. Textures can also be dropped onto the window.
-The UV Template tab shows the UV lines over the texture; choose meshes, LOD and UV
-channel 0–7, adjust resolution/colors/line width, and export PNG, SVG, or a ZIP of
-PNGs by material. Save the imported mesh selection as a JSON UV project. Input files
-are never modified. No demonstration model is bundled.
+Maintainers: [RELEASING.md](RELEASING.md) covers PowerShell 7 packaging and the
+external private key required to sign releases. Private signing keys stay outside Git.
 
-**Lightboard:** Lights with a 32-step sequence, intensity and direction. A light can
-have up to six colors: add colors with +, pick the highlighted color and paint, and each
-step shows one of them. carcols allows one color per siren, so each color of a light is
-exported as its own siren (32 in total); give those sirens bones in the same spot on the
-model. Merge Into Light Above combines two imported sirens into one multi-color light.
-Click or drag to paint steps. Undo/redo, invert, shift, and clear are available. Preview a schematic lightbar at BPM tick speed. Save/load JSON,
-import carcols with multiple siren settings, export binary/unsigned decimal sequences,
-or export complete carcols. Imported unrelated XML is retained. The MSB is the first
-visible step; 4294967295 is supported. Export also shares carcols with Meta Editor.
+## Updates and security
 
-**Stripe Designer:** Symmetric up/down chevrons or diagonal stripes with custom colors,
-dimensions, angle, stripe width, center, offset, and opacity. Export transparent PNGs
-up to 8192 pixels per dimension. Optionally clip the output to the UV Editor mesh/LOD/
-channel selection. The reflective display effect never changes exported pixels.
-Save/load chevron settings as JSON.
+**Help > Check for updates** checks the stable signed feed. Automatic checks are on
+by default at startup and every six hours; change them in **Help > Update settings**.
+A newer verified release offers **Download update**, followed by **Save project and
+restart**. Cancelling the save keeps the app open; discarding work requires confirmation.
 
-**Meta Editor:** Import and edit handling, vehicles, carvariations, and carcols XML.
-Choose entries in files containing multiple vehicles/settings. Guided fields expose
-top-level values and vector components, retaining nested and unknown elements.
-The XML editor gives access to every nested field. Validate and export individual
-files, generate baseline car templates, or export metadata and an fxmanifest in a
-resource ZIP with an empty stream folder. Add your actual YFT/YTD assets to stream.
+The app verifies the pinned RSA-PSS-SHA256 manifest signature, product, stable version,
+signed file size and SHA256. Redirects must stay on HTTPS. A helper waits for the
+old process to exit, replaces only the application executable, and restores the old
+file if installation or launch fails. Projects and source textures are retained.
 
-**Handling Compare:** Open or paste two handling.meta files. Match entries by handlingName,
-compare nested fields and attributes, and filter added/removed/changed/identical rows.
-Changes are counted before filtering. Decimal comparisons are exact string arithmetic,
-so a difference smaller than floating-point precision still counts. Export CSV/JSON.
-Duplicate handlingName entries produce an error instead of silently overwriting data.
+The default feed needs public, published GitHub Releases. No GitHub token is embedded.
+A different public HTTPS feed may be selected, but its manifests must match the
+pinned key. Feed signatures are separate from Windows publisher signing; no
+Authenticode publisher certificate is currently included.
 
-## Compatibility and current limits
+Read [SECURITY.md](SECURITY.md) for reporting and current review limits, and
+[RELEASING.md](RELEASING.md) for key handling and release recovery.
 
-Duck Workshop and [Duck Studio](https://github.com/Rubber-Ducks-Development/duck-studios)
-share their desktop design language and ordinary image files. Workshop edits vehicle
-assets; Studio builds clothing collections. Their workspace formats are independent:
-`.duckworkshop` and Studio's `.weftproj` cannot be opened interchangeably. Workshop
-does not import Studio's native YDD clothing models or YTD dictionaries. For a shared
-texture workflow, export PNG from Studio, edit or inspect it in Workshop, and replace
-the texture in Studio with the saved PNG. Workshop's transparent stripe PNGs can also
-be imported into Studio. See [the compatibility matrix](docs/COMPATIBILITY.md).
+## Documentation
 
-- UV recovery reads existing UVs. It does not unwrap, remap, or change the source model.
-- The 3D preview is a texture check with simple lighting, not an in-game render. GTA
-  models are shown Z-up; turn off "Z axis is up" or turn on "Flip V" in the Textures
-  panel if a model or texture appears sideways or upside down.
-- PSDs use the merged image Photoshop saves with Maximize Compatibility; without it,
-  visible layers are combined with normal blending only. PSB, CMYK and 32-bit PSDs are
-  unsupported. DDS supports DXT1/3/5. Textures are limited to 1 GB and 16384 pixels.
-- Native GTA binary support covers legacy PC RSC7 YFT (version 159) and YDR (165),
-  including fragment pristine/damaged part drawables. RPF archives, encrypted resources,
-  Enhanced/Gen9 models, and unsupported vertex formats need a CodeWalker XML export.
-- Binary/XML 3D previews use raw mesh positions, without skeletal or articulated
-  transforms. UV coordinates remain independent of those transforms.
-- Models need complete, finite UVs. Mixed mapped/unmapped OBJ faces in one mesh are
-  rejected. OBJ MTL files, external GLB buffers, FBX and YTD texture dictionaries are not
-  loaded; load each texture file in the Textures panel.
-- UV exports cover the 0–1 tile and clip coordinates outside it. There is no UDIM export.
-- Lightboard previews a schematic lightbar, not a vehicle model with game lighting.
-  Per-siren rotation behavior and imported timeMultiplier/multiples can affect actual
-  game timing. Imported settings are preserved; always test patterns on the target model.
-- New vehicle metadata is a baseline car template, not a guarantee for every vehicle.
-  Import known-good files for model-specific fields. Link modelName/handlingId and
-  carvariations sirenSettings to the matching handlingName/carcols ID. Test in FiveM.
-- The app restores editor settings locally on normal shutdown. Use Ctrl+S to save a
-  complete .duckworkshop file with imported geometry, patterns, metadata, comparison
-  inputs and links to texture files (the images stay where they are). Ctrl+O reopens it.
-- Inputs are limited to 100 MB, decompressed GTA resources to 256 MB, and models to
-  two million triangles. Exports/imports of models run in a background worker.
+| Guide | Contents |
+| --- | --- |
+| [User guide](docs/USER-GUIDE.md) | Complete tool descriptions, shortcuts, previews and limits |
+| [Compatibility](docs/COMPATIBILITY.md) | How Studio and Workshop share image workflows and differ in formats |
+| [UI review](docs/UI-REVIEW.md) | Studio alignment and design decisions |
+| [Validation](docs/VALIDATION.md) | Tested behavior and game/runtime verification limits |
+| [Changelog](CHANGELOG.md) | Versioned changes |
+| [Releasing](RELEASING.md) | Packaging, signing, publishing and recovery |
+| [Security](SECURITY.md) | Private reporting and update trust |
+| [Dependency notices](docs/DEPENDENCIES.md) | Locked dependency attribution and license texts |
+| [README style](docs/README-STYLE.md) | Shared documentation format used across the app family |
 
-## Source structure
+## Rubber Ducks Development
 
-- `src/models.rs`: OBJ, CodeWalker XML, GLB and original RSC7 readers.
-- `src/render.rs`: UV PNG/SVG and chevron raster rendering/masking.
-- `src/textures.rs`: texture decoding, including PSD merged images.
-- `src/patterns.rs`: sequencer conversions and carcols round trips.
-- `src/meta.rs`: XML preserving edits, templates, and resource manifest.
-- `src/diff.rs`: exact numeric normalization and field comparison.
-- `src/ui.rs`: native egui application, dialogs, previews and background exports.
-- `src/ui/theme.rs`: Duck Studio-matched palette, fonts, tabs and buttons.
-- `src/ui/viewer.rs`: OpenGL textured 3D preview and orbit camera.
-- `src/ui/live.rs`: texture loading and reload-on-save file watching.
-- `src/updates.rs`: pinned-key verification, bounded HTTPS downloads and portable updates.
-- `src/ui/updates.rs`: update checks, settings, download and save-before-restart UI.
-- `scripts/Sign-Update.ps1`: release-feed signer, using an external private key.
-- `tests/core.rs`: deterministic format, export and preservation tests.
-- `tests/colors_textures.rs`: multi-color lights, carcols expansion and texture decoding.
+Two companion workspaces with a shared visual language and different production jobs.
 
-This is an independent implementation of the requested workflows. No Workshop or
-Dawnstar proprietary source, branding, assets, or paid editor code is included.
-Research sources and dependency attribution are listed in `docs/`.
+| App | What it is for | Workspace | Source and downloads |
+| --- | --- | --- | --- |
+| **Duck Studio** | Clothing collections, tattoos, outfits, texture workflows and pack builds | `.weftproj` | [Repository](https://github.com/Rubber-Ducks-Development/duck-studios) · [Releases](https://github.com/Rubber-Ducks-Development/duck-studios/releases) |
+| **Duck Workshop** | Vehicle UVs, light patterns, warning textures, metadata and handling comparison | `.duckworkshop` | [Repository](https://github.com/Rubber-Ducks-Development/duckworkshop) · [Releases](https://github.com/Rubber-Ducks-Development/duckworkshop/releases) |
 
-## Workspace shortcuts
+**Share images, keep projects separate.** Export a texture as PNG from Studio, inspect
+or edit it in Workshop, then replace the image in Studio. Workshop's transparent
+stripe PNGs can also be imported into Studio. The two workspace schemas are not
+interchangeable; Workshop does not directly import clothing YDD/YTD packages.
 
-- Ctrl+N: new blank workspace (confirmation protects current work).
-- Ctrl+O: open a `.duckworkshop` project.
-- Ctrl+Shift+N / Ctrl+Shift+O: Studio-compatible aliases for new / open.
-- Ctrl+S / Ctrl+Shift+S: save / save as, including geometry and editor data.
-- F1: tool guide and keyboard shortcuts.
-- Lightboard: Space plays/pauses; Ctrl+Z / Ctrl+Y undo/redo.
+## Contributing
 
-Lightboard opens with eight unpainted light channels. Left click or drag paints with
-the light's highlighted color; clicking a step already in that color, or right click or
-drag, erases. The grouped 32-step grid, palette and preview share the
-selected light. Metadata and handling comparisons start empty. Enter your actual
-model name and handling ID before generating metadata files.
+Read [CONTRIBUTING.md](CONTRIBUTING.md) and run the focused format, project and update
+checks before submitting changes. Use original synthetic fixtures instead of
+redistributing game assets. Preserve source models and unrelated metadata.
 
-## Interface
+Use [bug reports](https://github.com/Rubber-Ducks-Development/duckworkshop/issues/new?template=bug_report.yml)
+for reproducible problems and [feature requests](https://github.com/Rubber-Ducks-Development/duckworkshop/issues/new?template=feature_request.yml)
+for a concrete workflow improvement. Include the tool name, app version and a
+minimal example you have permission to share. Report vulnerabilities privately through [SECURITY.md](SECURITY.md).
 
-The window follows Duck Studio's dark layout: a Project / Edit / Tools / View / Help
-menu bar, a tool list and project summary on the left, and a status bar with Guide,
-Open project and Save project. Ctrl+1 to Ctrl+5 switch tools. Closing the window asks
-for confirmation. When installed, the Windows Segoe UI, Consolas and Segoe MDL2 Assets
-fonts are used; otherwise the bundled egui fonts are used and icons are omitted.
-Theme colors and widget helpers are in `src/ui/theme.rs`.
+## License and credits
 
-## Signed updates
+Duck Workshop uses the [MIT license](LICENSE). Dependencies keep their own licenses;
+the inventory and copied notices are in [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md).
 
-Help > Check for updates checks the stable release feed. Automatic checks run on
-startup and every six hours. A newer verified release offers Download update, then
-Save project and restart. Cancelling the save leaves the current app open. Restart
-without saving has a separate confirmation. Not now skips that version's automatic
-offer; a manual check can offer it again.
+The firefighter duck artwork was supplied by the project owner. Documentation images
+show actual app controls with original demonstration patterns; see
+[image sources](docs/images/SOURCES.md). No proprietary editor artwork or code is
+included. Duck Workshop is independent of Rockstar Games and FiveM.
 
-The app verifies the manifest signature, product, version, signed file size and
-SHA256. HTTPS redirects are checked individually. A helper waits for the editor to
-exit, installs beside the current executable, retains `previous.exe` in its hidden
-staging folder, and restores the old executable if installation or launch fails.
-The app must be in a writable folder. Projects and source textures are not replaced.
-Private-repository downloads are unavailable to installed apps; no GitHub token is
-embedded. A different public HTTPS signed feed can be selected in Update settings.
-
-Maintainers: [RELEASING.md](RELEASING.md) explains key storage, the signer, optional
-Windows publisher signing, packaging and GitHub release assets.
+<p align="center"><sub>Made by Rubber Ducks Development.</sub></p>

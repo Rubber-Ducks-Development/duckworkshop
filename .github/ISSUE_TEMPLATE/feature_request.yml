@@ -1,0 +1,33 @@
+name: Feature request
+description: Suggest a specific workflow improvement.
+title: "[Feature]: "
+body:
+  - type: input
+    id: tool
+    attributes:
+      label: Affected tool or workflow
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to accomplish?
+      description: Describe the task and what currently gets in the way.
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: Proposed behavior
+      description: Give one concrete before/after example.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Current workaround and alternatives
+  - type: textarea
+    id: reference
+    attributes:
+      label: Optional references
+      description: Add screenshots or public format documentation that explains the workflow. Share only content you have permission to publish.

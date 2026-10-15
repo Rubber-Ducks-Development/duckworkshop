@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security policy
+    url: https://github.com/Rubber-Ducks-Development/duckworkshop/security/policy
+    about: Read the private reporting guidance before sharing a security-sensitive finding.
