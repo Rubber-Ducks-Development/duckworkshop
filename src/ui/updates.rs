@@ -104,11 +104,14 @@ impl Updater {
                     self.receiver = None;
                     match event {
                         Event::Checked(Ok(Some(verified))) => {
-                            self.show |=
+                            let offer =
                                 self.manual || verified.release.version != self.settings.skipped;
+                            self.show |= offer;
                             self.status =
                                 format!("Duck Workshop {} is available.", verified.release.version);
-                            self.available = Some(verified);
+                            if offer {
+                                self.available = Some(verified);
+                            }
                         }
                         Event::Checked(Ok(None)) => {
                             self.status = "You're using the latest signed release.".into();
@@ -225,6 +228,9 @@ impl Workbench {
         if !open || action == Some(4) {
             if let Some(release) = self.updater.available.take() {
                 self.updater.settings.skipped = release.release.version;
+            }
+            if let Some(staged) = self.updater.staged.take() {
+                self.updater.settings.skipped = staged.release.version.clone();
             }
             self.update_after_save = false;
             self.updater.show = false;
