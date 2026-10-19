@@ -23,3 +23,20 @@ jobs:
         run: cargo +stable clippy --all-targets --locked -- -D warnings
       - name: Build Windows release
         run: cargo +stable build --release --locked
+  installer:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          dotnet-version: '10.0.x'
+      - name: Check install, repair and owned-file uninstall
+        run: dotnet run --project Installer.Tests/Installer.Tests.csproj -c Release -- "${{ runner.temp }}/workshop-install-tests"
+      - name: Build setup window
+        run: dotnet build Installer/DuckWorkshop.Setup.csproj -c Release -p:NuGetAudit=true -p:NuGetAuditMode=all '-warnaserror:NU1900,NU1901,NU1902,NU1903,NU1904,NU1905'
+      - name: Check installer layouts
+        run: |
+          New-Item -ItemType Directory -Path "${{ runner.temp }}/workshop-setup-preview" -Force | Out-Null
+          dotnet run --project Installer.Preview/Preview.csproj -c Release -- "${{ runner.temp }}/workshop-setup-preview"

@@ -29,10 +29,15 @@ try {
     foreach ($name in @('README.md','LICENSE','RELEASING.md','CHANGELOG.md','SECURITY.md','CONTRIBUTING.md')) { Copy-Item -LiteralPath $name -Destination $package -Force }
     Copy-Item -LiteralPath docs -Destination $package -Recurse -Force
     Copy-Item -LiteralPath assets -Destination $package -Recurse -Force
+    $licenses = Join-Path $package 'licenses'
+    New-Item -ItemType Directory -Path $licenses -Force | Out-Null
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Installer/LICENSE') -Destination (Join-Path $licenses 'DuckWorkshopSetup-LICENSE.txt') -Force
+    $setup = Join-Path $release 'DuckWorkshopSetup.exe'
+    & (Join-Path $PSScriptRoot 'scripts/Build-Setup.ps1') -ApplicationFolder $package -OutputPath $setup
     Get-ChildItem -LiteralPath $package -Recurse -File | Where-Object LastWriteTime -lt ([DateTime]::new(1980,1,1)) | ForEach-Object { $_.LastWriteTime = [DateTime]::new(1980,1,1) }
     $zip = Join-Path $release "Duck-Workshop-$version-Windows-x64.zip"
     Compress-Archive -LiteralPath $package -DestinationPath $zip -Force
-    $sums = foreach ($item in @($application, $zip, (Join-Path $release 'latest.json'))) { $hash = Get-FileHash -LiteralPath $item -Algorithm SHA256; "$($hash.Hash.ToLowerInvariant())  $([IO.Path]::GetFileName($item))" }
+    $sums = foreach ($item in @($application, $setup, $zip, (Join-Path $release 'latest.json'))) { $hash = Get-FileHash -LiteralPath $item -Algorithm SHA256; "$($hash.Hash.ToLowerInvariant())  $([IO.Path]::GetFileName($item))" }
     [IO.File]::WriteAllLines((Join-Path $release 'SHA256SUMS.txt'), $sums)
-    Write-Output "Release prepared in $release. Upload all four release assets after reviewing them."
+    Write-Output "Release prepared in $release. Upload all five release assets after reviewing them."
 } finally { Pop-Location }

@@ -8,3 +8,11 @@
 /.duck-workshop-update-*/
 Duck-Workshop.exe
 Duck-Workshop-*-backup.exe
+
+/.build/
+/Installer/bin/
+/Installer/obj/
+/Installer.Tests/bin/
+/Installer.Tests/obj/
+/Installer.Preview/bin/
+/Installer.Preview/obj/

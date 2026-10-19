@@ -48,3 +48,24 @@ actions while keeping the work surfaces appropriate to each app.
 Visual verification limit: Studio was inspected live. Computer Use was stopped with
 the physical Escape key during the attempted updated Workshop launch; no further
 native app control or final rendered Workshop sign-off was performed in that turn.
+
+
+## Early-access setup tool (2026-10-18)
+
+Direct-build reference lock: the user explicitly requested Duck Studio's setup
+flow. Its Installer/Program.cs and InstallEngine.cs are the dominant references;
+Workshop's existing duck logo and gold accent supply the product identity.
+Refero's bundled craft-details guidance supplies visible keyboard focus, clear
+form labels, disabled controls during work and an explicit completion action.
+No live Refero server was available.
+
+| Decision | Source | Preserved role |
+| --- | --- | --- |
+| Charcoal 640x530 window, 26px inset, Segoe UI and duck heading | Studio setup | Compact native installer |
+| Application folder plus Browse, progress and Install/Finish actions | Studio setup | Familiar install and repair flow |
+| Gold primary button with dark text | Workshop accent and Refero contrast guidance | Clear primary action |
+| Early Access beneath the product heading | User's release requirement | Visible development status |
+| Per-user install, Start menu entry and owned-file uninstall | Studio setup engine | No administrator rights; projects preserved |
+
+The MIT-licensed Studio setup was adapted with attribution in Installer/LICENSE.
+Workshop does not register Studio's file extensions or share Studio's install marker.

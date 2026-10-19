@@ -1,6 +1,6 @@
 # Releases and signed updates
 
-Duck Workshop 0.3.0 uses a dedicated RSA 3072-bit release key. The app pins the
+Duck Workshop 0.3.1 uses a dedicated RSA 3072-bit release key. The app pins the
 PKCS#1 DER public key in `assets/UpdatePublicKey.der`; the matching PEM public key
 is used by the PowerShell signer. The key is independent of Duck Studio's key.
 The envelope follows Studio's Payload/Signature convention, but the signed payload
@@ -27,7 +27,7 @@ releases must continue using the existing private key.
 
 ## Prepare a release
 
-Install stable Rust, Visual Studio C++ build tools/Windows SDK, and PowerShell 7.
+Install stable Rust, Visual Studio C++ build tools/Windows SDK, PowerShell 7 and the .NET 10 SDK.
 Bump Cargo.toml and Cargo.lock together, then run:
 
 ```powershell
@@ -36,6 +36,7 @@ Bump Cargo.toml and Cargo.lock together, then run:
 
 This runs formatting, all tests, strict Clippy and the optimized build. It prepares:
 
+- `release/DuckWorkshopSetup.exe`, the self-contained per-user installer
 - `release/Duck-Workshop.exe`
 - `release/Duck-Workshop-<version>-Windows-x64.zip` with docs and licenses
 - `release/latest.json`, an RSA-PSS-SHA256 signed manifest
@@ -44,7 +45,7 @@ This runs formatting, all tests, strict Clippy and the optimized build. It prepa
 To sign an already-built executable separately:
 
 ```powershell
-./scripts/Sign-Update.ps1 -ApplicationPath './release/Duck-Workshop.exe' -Version '0.3.0' -SigningKeyPath '../DuckWorkshop-Signing-Tools/release-signing/duck-workshop.private.pem' -Notes 'Describe the changes.'
+./scripts/Sign-Update.ps1 -ApplicationPath './release/Duck-Workshop.exe' -Version '0.3.1' -SigningKeyPath '../DuckWorkshop-Signing-Tools/release-signing/duck-workshop.private.pem' -Notes 'Describe the changes.'
 ```
 
 Sign-Update checks that the private key and both public-key encodings match. It
@@ -65,7 +66,7 @@ creating latest.json. Do not use a self-signed certificate as a claim of public 
 ## Publish
 
 Keep binaries out of Git history. Create a GitHub Release tagged `v<version>` from
-the tested source commit and upload the four files above. Mark the stable release
+the tested source commit and upload the five files above. Mark the stable release
 as latest. The default feed is:
 
 `https://github.com/Rubber-Ducks-Development/duckworkshop/releases/latest/download/latest.json`
@@ -90,3 +91,29 @@ target executable. Installation never requests administrator rights. The sibling
 `update-error.txt` when applying fails. Do not delete the staging folder while an
 update is in progress. After confirming the new version works and closing it, old
 staging folders may be removed manually. Workspace files remain independent.
+
+
+## Setup tool
+
+The setup UI follows Duck Studio's installer and displays Early Access prominently.
+`Installer/LICENSE` retains the adapted MIT code's attribution. Setup installs the
+same native Rust executable as the portable ZIP; the setup program bundles .NET
+10.0.13 so users do not need to install a runtime separately.
+
+`Build-Release.ps1` calls `scripts/Build-Setup.ps1` after staging the documented
+application package. It embeds that package and a per-file SHA256 manifest, runs
+the installer checks and creates `DuckWorkshopSetup.exe`. The existing signed
+`latest.json` still updates the native executable directly, including installed
+copies. Keep setup separate from the application ZIP to avoid recursive payloads.
+
+Install/repair accepts an empty folder or an existing Workshop-owned installation,
+rejects downgrades, checks every extracted file, preserves unrelated project files
+and retains the prior installation for recovery. Start menu and uninstall entries
+are created only for the current Windows account. The uninstaller deletes only
+recorded application files, validates every path first and keeps user projects
+and settings. An older installation does not remove another copy's Windows entries.
+
+Run `dotnet run --project Installer.Tests/Installer.Tests.csproj -c Release -- <empty-test-root>`
+for filesystem-only integration checks; these do not register Windows entries.
+`Installer.Preview/Preview.csproj` renders the ready and complete states and checks
+that controls stay within the setup window.

@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <AssemblyName>DuckWorkshopSetup</AssemblyName>
+    <StartupObject>DuckWorkshop.Preview.PreviewProgram</StartupObject>
+    <Version>0.3.1</Version>
+    <OutputPath>bin/preview/</OutputPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Preview.cs" />
+    <Compile Include="../Installer/Program.cs" Link="SetupWindow.cs" />
+    <Compile Include="../Installer/InstallEngine.cs" Link="InstallEngine.cs" />
+    <Resource Include="../assets/duck-workshop.png" Link="Logo.png" />
+  </ItemGroup>
+</Project>

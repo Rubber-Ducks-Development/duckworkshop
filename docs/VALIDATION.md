@@ -1,5 +1,19 @@
 # Validation
 
+## Early Access setup and 0.3.1 release (2026-10-19)
+
+The self-contained Workshop setup follows the Studio installer with Workshop
+branding and an Early Access label. Filesystem integration checks cover install,
+repair, project preservation, downgrade rejection, corrupt and incomplete payloads,
+duplicate files, symbolic ZIP entries, unsafe paths, cancellation and owned-file
+uninstall. No test modifies the user's actual Windows installation or shortcuts.
+
+WPF component renders check ready and completion layouts, including full button
+bounds. The automated package install checks the real embedded executable against
+the portable release. The setup uses its own Workshop marker and does not register
+Studio project associations. The retained MIT notice is included in source and
+the distributed license notices.
+
 ## Early-access siren facing correction (2026-10-18)
 
 The preview now applies each channel's carcols delta angle around its siren pivot,

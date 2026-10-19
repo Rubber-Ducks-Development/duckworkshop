@@ -13,7 +13,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/platform-Windows%20x64-0078D4?style=flat-square" alt="Platform: Windows x64">
   <img src="https://img.shields.io/badge/built%20with-Rust-D7B974?style=flat-square" alt="Built with Rust">
-  <img src="https://img.shields.io/badge/source-0.3.0-555555?style=flat-square" alt="Source version 0.3.0">
+  <img src="https://img.shields.io/badge/source-0.3.1-555555?style=flat-square" alt="Source version 0.3.1">
   <img src="https://img.shields.io/badge/status-Early%20Access-D7B974?style=flat-square" alt="Status: Early access">
   <img src="https://img.shields.io/badge/license-MIT-3A3A3A?style=flat-square" alt="License: MIT; third-party notices apply">
 </p>
@@ -30,7 +30,7 @@
 > [!NOTE]
 > **Early access.** Duck Workshop is actively being developed. Features and vehicle compatibility may change, and the 3D preview should be checked against the target vehicle in FiveM.
 >
-> **Release preparation.** The source is 0.3.0; the Windows release is currently a draft and the repository is private. [GitHub Releases](https://github.com/Rubber-Ducks-Development/duckworkshop/releases) will provide downloads once published and accessible. The tools process files locally; only optional update checks use the internet.
+> **Windows release.** [Download Duck Workshop 0.3.1 Early Access](https://github.com/Rubber-Ducks-Development/duckworkshop/releases/tag/v0.3.1). Use DuckWorkshopSetup.exe to install it, or choose the Windows x64 ZIP for a portable copy. This repository is private, so downloads require repository access. The tools process files locally; only optional update checks use the internet.
 
 <p align="center">
   <img src="docs/images/lightboard.png" alt="Duck Workshop Lightboard with eight demonstration red and blue light channels in the 32-step sequencer" width="100%">
@@ -78,23 +78,26 @@ Read the [user guide](docs/USER-GUIDE.md) for tool controls and detailed format 
 **Requirements:** Windows x64. The portable native application does not require a
 browser runtime, account, subscription or API key. Editing and export work offline.
 
-1. When available, download the Windows x64 ZIP from
+1. Download `DuckWorkshopSetup.exe` or the Windows x64 ZIP from
    [GitHub Releases](https://github.com/Rubber-Ducks-Development/duckworkshop/releases).
-2. Extract the package to a writable folder and run `Duck-Workshop.exe`.
+2. Run setup to install for your Windows account, or extract the ZIP to a writable
+   folder and run `Duck-Workshop.exe`.
 3. Choose one of the five tools. Import your own supported files, or create a light
    pattern, warning texture or metadata template.
 4. Use **Project > Save** to keep a complete workspace before closing or updating.
 
 | Download | Use it when |
 | --- | --- |
+| `DuckWorkshopSetup.exe` | You want guided installation, a Start menu shortcut and an uninstall entry. |
 | `Duck-Workshop-<version>-Windows-x64.zip` | You want the portable app with documentation and license notices. |
 | `Duck-Workshop.exe` | You want the standalone portable executable. |
 | `SHA256SUMS.txt` | You want to compare the download's SHA256 with the published checksums. |
 | `latest.json` | You maintain the update feed; the app reads this signed manifest automatically. |
 
-No installer or administrator rights are required. Private or draft release assets
-cannot be downloaded anonymously; until publication, build from source or use the
-maintainer-provided local package.
+Setup installs into `%LOCALAPPDATA%/Programs/Duck Workshop` by default. It includes
+its own runtime, verifies the packaged files and keeps projects during repair and
+uninstall. Administrator rights are not required. The portable ZIP remains available.
+Private release assets require repository access.
 
 ## File support
 

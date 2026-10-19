@@ -1,12 +1,13 @@
 # Changelog
 
-## Unreleased - Early access - 2026-10-18
+## 0.3.1 - Early Access - 2026-10-19
 
+- Added a self-contained Windows setup tool modeled on Duck Studio, with per-user installation, verified files, Start menu access, repair and an owned-file uninstaller that keeps projects.
 - Identified Duck Workshop as early access in the README. Features and vehicle compatibility are still being developed.
 - Fixed siren lenses appearing away from the vehicle by applying each light's carcols facing angle around its bone pivot, alongside its imported scale factor. The correction applies to imported vehicles generally; cambo1 was visually verified.
 - Added regression coverage for front, rear and both side-facing lenses, pivot preservation and the affine transforms uploaded to the renderer.
 
-## Unreleased - 2026-10-16
+### Vehicle and preview updates
 
 - Added a 0–100% Vehicle opacity slider to the siren preview. Fading the vehicle reveals the edited lenses without fading their emission or labels. Native/XML material render buckets and light texture alpha are retained for transparent lightbar housings.
 - UV Editor now defaults to Whole vehicle and offers Shell / UV selection for the isolated template material/meshes. The complete preview uses imported textures and each material's diffuse/livery UV channel; switching views preserves the UV export selection.
@@ -21,7 +22,7 @@
 - Lightboard now opens the 3D lighting preview in its own resizable window automatically. Hide/reopen controls replace the embedded preview; pinning remains available.
 - Matched the supplied label reference with compact dark badges and blue borders beside each siren. Nearby badges shift locally to avoid overlaps, replacing the perimeter arrangement and long leader lines.
 
-## Unreleased - 2026-10-15
+### UV and stripe workflows
 
 - Added six Stripe Designer presets, independent seam mirroring, a preview seam guide, adjustable honeycomb cells and a baked 3M 983-style reflective finish. Effects preserve PNG opacity and UV clipping.
 - Added an orbitable vehicle siren preview with playback, numbered selectable labels, light spill, ground glow and editable positions. The preview can pop out into a resizable window and stay on top.

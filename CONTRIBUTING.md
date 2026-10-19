@@ -15,3 +15,7 @@ keys out of Git. Use original synthetic fixtures for parsers. Describe the concr
 workflow changed and include relevant validation. UI changes should follow
 docs/UI-REVIEW.md and the existing theme helpers. Read RELEASING.md before changing
 updater trust, signing or distribution behavior.
+
+Installer changes also require the .NET 10 SDK. Run the Installer.Tests console
+checks against a disposable folder and Installer.Preview layout checks. Retain
+Installer/LICENSE when adapting the Studio-derived setup source.
