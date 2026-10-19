@@ -16,7 +16,7 @@ impl Workbench {
             });
         }
     }
-    pub(super) fn accept_vehicle(&mut self, imported: Imported) {
+    pub(super) fn accept_vehicle(&mut self, imported: Imported, open_preview: bool) {
         self.blink_snapshot();
         self.session.model_name = imported.name.clone();
         self.session.handling_name = imported.handling.clone();
@@ -57,8 +57,10 @@ impl Workbench {
         self.refresh_meta();
         self.sync_decimal();
         self.accept_model(imported.model);
-        self.tool = 1;
-        self.siren_popout = true;
+        if open_preview {
+            self.tool = 1;
+            self.siren_popout = true;
+        }
         self.status.push_str(if matched {
             " · matching siren pattern loaded"
         } else {

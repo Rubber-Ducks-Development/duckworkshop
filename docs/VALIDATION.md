@@ -1,5 +1,28 @@
 # Validation
 
+## Matching vehicle settings and lens scale, 0.3.2 (2026-10-19)
+
+All 75 Rust tests passed. New regression coverage checks numbered metadata
+downloads, direct high-detail YFT selection, model-name and siren-ID matching,
+conflicting copies, unrelated parent folders, missing/partial scale metadata,
+and preservation of valid scales 10 and 100. Formatting, strict all-target
+Clippy and the optimized Windows build passed.
+
+Read-only checks with the supplied F350 model and metadata verified both file
+and folder import with the original `carcols (1).meta` filename: ID 32704,
+1000 BPM, 20 channels and scale 10 for every light. The supplied cambo1 resource
+matched ID 47298 and retained all 32 authored scale settings, including scale
+100 for its ten modeled sirens. No fallback-size warning appeared for either
+correct match. The previously prepared F350 project still opens and retains
+its correct settings. These checks validate parsing, matching and the scale
+values passed to preview markers; no new GPU appearance check was performed.
+User vehicle files and test copies are excluded from the application package.
+
+YFT imports replace the current sequence through the same acceptance path as
+folder import. Missing settings load a blank sequence; real lenses with unknown
+scale remain at authored size, and the preview reports missing scale metadata
+above the scene. New-sequence XML exports retain their documented default scale.
+
 ## Early Access setup and 0.3.1 release (2026-10-19)
 
 The self-contained Workshop setup follows the Studio installer with Workshop

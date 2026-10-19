@@ -864,3 +864,97 @@ fn resource_folder_matches_siren_id_and_never_guesses_on_missing_or_duplicate_me
         bytes
     );
 }
+
+#[test]
+fn selecting_a_yft_loads_its_settings_from_numbered_downloads_and_keeps_conflicts_visible() {
+    use duck_workshop::{sirens, vehicle_resource as vr};
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    std::fs::create_dir(root.join("stream")).unwrap();
+    std::fs::create_dir(root.join("data")).unwrap();
+    let path = root.join("stream/f350p_hi.yft");
+    std::fs::write(&path, rsc_fixture("yft")).unwrap();
+    std::fs::write(
+        root.join("data/CARVARIATIONS (2).META"),
+        meta::variations("f350p", 32704, 0),
+    )
+    .unwrap();
+    let source = Pattern {
+        id: 32704,
+        bpm: 1000.,
+        name: "F350".into(),
+        ..Default::default()
+    }
+    .to_xml()
+    .unwrap()
+    .replace("scaleFactor value=\"100\"", "scaleFactor value=\"10\"");
+    let carcols = root.join("data/carcols (1).meta");
+    std::fs::write(&carcols, &source).unwrap();
+    let imported = vr::import_file(&path).unwrap();
+    assert_eq!(imported.name, "f350p");
+    assert_eq!(imported.model.name, "f350p_hi.yft");
+    let pattern = imported.pattern.unwrap();
+    assert_eq!((pattern.id, pattern.bpm), (32704, 1000.));
+    assert_eq!(&sirens::surface_scales(&pattern)[..8], &[10.; 8]);
+    assert!(imported.metas[2].is_some());
+    assert!(imported.metas[3].is_some());
+    assert_eq!(std::fs::read_to_string(&carcols).unwrap(), source);
+
+    // A downloaded copy must not override another matching copy without a choice.
+    std::fs::write(
+        root.join("data/carcols.meta"),
+        source.replace("scaleFactor value=\"10\"", "scaleFactor value=\"100\""),
+    )
+    .unwrap();
+    let conflict = vr::import_file(&path).unwrap();
+    assert!(conflict.pattern.is_none());
+    assert!(
+        conflict
+            .model
+            .warnings
+            .iter()
+            .any(|w| w.contains("Conflicting siren settings"))
+    );
+    std::fs::remove_file(root.join("data/carcols.meta")).unwrap();
+
+    // Similar names and settings linked to another model are not matches.
+    std::fs::rename(&carcols, root.join("data/carcols (backup).meta")).unwrap();
+    assert!(vr::import_file(&path).unwrap().pattern.is_none());
+    std::fs::rename(root.join("data/carcols (backup).meta"), &carcols).unwrap();
+    std::fs::write(
+        root.join("data/CARVARIATIONS (2).META"),
+        meta::variations("othercar", 32704, 0),
+    )
+    .unwrap();
+    assert!(vr::import_file(&path).unwrap().pattern.is_none());
+}
+
+#[test]
+fn a_loose_yft_does_not_search_parent_folders_for_unrelated_settings() {
+    use duck_workshop::vehicle_resource as vr;
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    let folder = root.join("vehicle");
+    std::fs::create_dir(&folder).unwrap();
+    let path = folder.join("loose.yft");
+    std::fs::write(&path, rsc_fixture("yft")).unwrap();
+    std::fs::write(
+        root.join("carvariations.meta"),
+        meta::variations("loose", 1, 0),
+    )
+    .unwrap();
+    std::fs::write(
+        root.join("carcols.meta"),
+        Pattern::default().to_xml().unwrap(),
+    )
+    .unwrap();
+    let imported = vr::import_file(&path).unwrap();
+    assert!(imported.pattern.is_none());
+    assert!(
+        imported
+            .model
+            .warnings
+            .iter()
+            .any(|w| w.contains("No valid matching"))
+    );
+}

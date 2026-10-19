@@ -71,7 +71,7 @@ impl Workbench {
             if ui.small_button("Import folder").clicked() {
                 self.import_vehicle_folder();
             }
-            if ui.small_button("Model file").on_hover_text("Load only a model and keep the current sequence. Import folder matches vehicle data automatically.").clicked() {
+            if ui.small_button("Model file").on_hover_text("YFT files load nearby matching vehicle settings and replace the sequence. Other model formats keep the current sequence. Undo restores the previous sequence.").clicked() {
                 self.import_model();
             }
             if ui
@@ -240,6 +240,17 @@ impl Workbench {
         };
         ui.label(RichText::new(description).small().color(MUTED));
         if let Some(model) = &self.model {
+            ui.label(
+                RichText::new(format!(
+                    "Sequence: {} · siren settings ID {}",
+                    self.session.pattern.name, self.session.pattern.id
+                ))
+                .small()
+                .color(MUTED),
+            );
+            if sirens::missing_surface_scales(model, &self.session.pattern) {
+                ui.label(RichText::new("Light size is unverified: matching carcols settings are missing or incomplete. Lenses without settings stay at their authored size. Import the vehicle folder or its carcols settings.").small().color(ACCENT));
+            }
             egui::CollapsingHeader::new(format!("Import notes ({})", model.warnings.len()))
                 .id_salt("siren-import-notes")
                 .show(ui, |ui| {

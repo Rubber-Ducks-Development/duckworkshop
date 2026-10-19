@@ -158,7 +158,7 @@ pub fn markers(
     settings: &PreviewSettings,
     step: usize,
 ) -> Vec<Marker> {
-    let scales = surface_scales(pattern);
+    let scales = surface_scale_settings(pattern);
     let mut min = Vec3::new(-1.2, -0.2, 0.);
     let mut max = Vec3::new(1.2, 0.2, 0.2);
     if let Some(model) = model {
@@ -195,7 +195,13 @@ pub fn markers(
                     ]
                 });
             markers.push(Marker {
-                surface_scale: scales[id as usize - 1],
+                // A new sequence's export default is not evidence of a vehicle's
+                // authored scale. Avoid enlarging real lenses until settings exist.
+                surface_scale: scales[id as usize - 1].unwrap_or(if model.is_some() {
+                    1.
+                } else {
+                    100.
+                }),
                 id,
                 channel,
                 layer,
@@ -213,7 +219,21 @@ pub fn markers(
 
 /// Match the scaling metadata retained by Pattern::to_xml, including unedited imported settings.
 pub fn surface_scales(pattern: &Pattern) -> [f32; 32] {
-    let mut scales = [100.; 32];
+    surface_scale_settings(pattern).map(|s| s.unwrap_or(100.))
+}
+
+/// Warn only about sizes actually needed by this model, including partial metadata.
+pub fn missing_surface_scales(model: &Model, pattern: &Pattern) -> bool {
+    let scales = surface_scale_settings(pattern);
+    model
+        .meshes
+        .iter()
+        .flat_map(|m| &m.siren_ids)
+        .any(|&id| (1..=32).contains(&id) && scales[id as usize - 1].is_none())
+}
+
+fn surface_scale_settings(pattern: &Pattern) -> [Option<f32>; 32] {
+    let mut scales = [None; 32];
     let Some(source) = &pattern.source_xml else {
         return scales;
     };
@@ -244,12 +264,11 @@ pub fn surface_scales(pattern: &Pattern) -> [f32; 32] {
                 .and_then(|n| n.attribute("value").or(n.text()))
         };
         scales[i] = if value("scale").is_some_and(|s| s.eq_ignore_ascii_case("false")) {
-            1.
+            Some(1.)
         } else {
             value("scaleFactor")
                 .and_then(|s| s.parse::<f32>().ok())
                 .filter(|n| n.is_finite() && (0.0..=1000.).contains(n))
-                .unwrap_or(100.)
         };
     }
     scales

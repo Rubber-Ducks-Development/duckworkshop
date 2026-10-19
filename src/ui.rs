@@ -33,6 +33,7 @@ enum JobResult {
     Model(Model),
     VehicleCatalog(duck_workshop::vehicle_resource::Catalog),
     Vehicle(Box<duck_workshop::vehicle_resource::Imported>),
+    VehicleFile(Box<duck_workshop::vehicle_resource::Imported>),
     Saved(String),
     Project(Box<Project>, PathBuf),
     ProjectSaved(PathBuf),
@@ -258,7 +259,10 @@ impl Workbench {
                             self.vehicle_catalog = Some(catalog);
                             self.status = "Choose the vehicle to import".into();
                         }
-                        Ok(JobResult::Vehicle(imported)) => self.accept_vehicle(*imported),
+                        Ok(JobResult::Vehicle(imported)) => self.accept_vehicle(*imported, true),
+                        Ok(JobResult::VehicleFile(imported)) => {
+                            self.accept_vehicle(*imported, false)
+                        }
                         Ok(JobResult::Saved(name)) => self.message(Ok(format!("Saved {name}"))),
                         Ok(JobResult::Project(project, path)) => {
                             self.restore_project(*project, path)
@@ -320,7 +324,19 @@ impl Workbench {
             )
             .pick_file()
         {
-            self.start_job(move || Ok(JobResult::Model(models::load(&path)?)));
+            self.start_job(move || Self::load_model_file(&path));
+        }
+    }
+    fn load_model_file(path: &std::path::Path) -> Result<JobResult> {
+        if path
+            .extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case("yft"))
+        {
+            Ok(JobResult::VehicleFile(Box::new(
+                duck_workshop::vehicle_resource::import_file(path)?,
+            )))
+        } else {
+            Ok(JobResult::Model(models::load(path)?))
         }
     }
     fn refresh_uv(&mut self) {
@@ -1588,6 +1604,11 @@ impl eframe::App for Workbench {
                     let project = Project::from_json(&duck_workshop::read_file(&path)?)?;
                     Ok(JobResult::Project(Box::new(project), path))
                 });
+            } else if path
+                .extension()
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("yft"))
+            {
+                self.start_job(move || Self::load_model_file(&path));
             } else if self.tool == 0 {
                 let ext = path
                     .extension()
@@ -1597,7 +1618,7 @@ impl eframe::App for Workbench {
                 if duck_workshop::textures::EXTENSIONS.contains(&ext.as_str()) {
                     self.apply_texture(None, path);
                 } else {
-                    self.start_job(move || Ok(JobResult::Model(models::load(&path)?)));
+                    self.start_job(move || Self::load_model_file(&path));
                 }
             }
         }

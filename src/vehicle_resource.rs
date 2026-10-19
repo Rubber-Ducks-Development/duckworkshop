@@ -35,6 +35,28 @@ fn named(path: &Path, name: &str) -> bool {
     path.file_name()
         .is_some_and(|n| n.eq_ignore_ascii_case(name))
 }
+// Browsers add a numbered suffix when downloading another copy of a metadata file.
+// Do not silently prefer one copy: conflicting settings still require a user choice.
+fn metadata_named(path: &Path, name: &str) -> bool {
+    if named(path, name) {
+        return true;
+    }
+    let filename = path
+        .file_name()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .to_ascii_lowercase();
+    let Some(stem) = filename.strip_suffix(".meta") else {
+        return false;
+    };
+    let Some(suffix) = stem.strip_prefix(name.trim_end_matches(".meta")) else {
+        return false;
+    };
+    suffix
+        .strip_prefix(" (")
+        .and_then(|s| s.strip_suffix(')'))
+        .is_some_and(|n| !n.is_empty() && n.bytes().all(|c| c.is_ascii_digit()))
+}
 fn files(root: &Path) -> Result<Vec<PathBuf>> {
     fn visit(dir: &Path, depth: usize, count: &mut usize, out: &mut Vec<PathBuf>) -> Result<()> {
         if depth > 12 {
@@ -108,7 +130,7 @@ pub fn discover(root: &Path) -> Result<Catalog> {
     let paths = files(&root)?;
     let mut warnings = vec![];
     let mut declared = BTreeSet::new();
-    for path in paths.iter().filter(|p| named(p, "vehicles.meta")) {
+    for path in paths.iter().filter(|p| metadata_named(p, "vehicles.meta")) {
         match text(path).and_then(|s| {
             let doc = crate::xml_document(&s)?;
             Ok(doc
@@ -177,6 +199,33 @@ fn safe_txd(name: &str) -> bool {
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || "_-+".contains(c))
 }
+/// A directly selected YFT uses the same metadata matching as a folder import.
+/// Search only its containing resource, never an unrelated ancestor such as Desktop.
+pub fn import_file(path: &Path) -> Result<Imported> {
+    let model = path.canonicalize().map_err(|e| e.to_string())?;
+    if !model
+        .extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("yft"))
+    {
+        return Err("Choose a YFT vehicle file".into());
+    }
+    let parent = model.parent().ok_or("Vehicle file has no parent folder")?;
+    let stem = model.file_stem().unwrap_or_default().to_string_lossy();
+    let name = if stem.to_ascii_lowercase().ends_with("_hi") {
+        &stem[..stem.len() - 3]
+    } else {
+        &stem
+    };
+    import(
+        &Vehicle {
+            name: name.to_owned(),
+            root: resource_root(&model, parent),
+            model,
+            high: None,
+        },
+        false,
+    )
+}
 pub fn import(vehicle: &Vehicle, high: bool) -> Result<Imported> {
     let paths = files(&vehicle.root)?;
     let chosen = if high {
@@ -206,7 +255,7 @@ pub fn import(vehicle: &Vehicle, high: bool) -> Result<Imported> {
             "handling.meta",
         ]
         .iter()
-        .any(|n| named(p, n))
+        .any(|n| metadata_named(p, n))
     }) {
         let source = match text(path) {
             Ok(s) => s,
@@ -222,11 +271,11 @@ pub fn import(vehicle: &Vehicle, high: bool) -> Result<Imported> {
                 continue;
             }
         };
-        if named(path, "carcols.meta") {
+        if metadata_named(path, "carcols.meta") {
             carcols.push((path.clone(), source));
             continue;
         }
-        if named(path, "handling.meta") {
+        if metadata_named(path, "handling.meta") {
             continue;
         }
         for node in doc.descendants().filter(|n| {
@@ -236,7 +285,7 @@ pub fn import(vehicle: &Vehicle, high: bool) -> Result<Imported> {
                         .is_some_and(|v| v.trim().eq_ignore_ascii_case(&vehicle.name))
             })
         }) {
-            if named(path, "vehicles.meta") {
+            if metadata_named(path, "vehicles.meta") {
                 let txd = value(node, "txdName");
                 if safe_txd(&txd) {
                     txds.insert(0, txd.to_ascii_lowercase());
@@ -278,7 +327,7 @@ pub fn import(vehicle: &Vehicle, high: bool) -> Result<Imported> {
         }
     }
     if !handling.is_empty() {
-        for p in paths.iter().filter(|p| named(p, "handling.meta")) {
+        for p in paths.iter().filter(|p| metadata_named(p, "handling.meta")) {
             if let Ok(s) = text(p)
                 && let Ok(doc) = crate::xml_document(&s)
                 && doc.descendants().any(|n| {

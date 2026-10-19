@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.2 - Early Access - 2026-10-19
+
+- Fixed vehicle metadata discovery for numbered downloads such as `carcols (1).meta` and `carvariations (2).meta`. Matching still uses the vehicle name and siren settings ID; conflicting copies require a choice instead of silently overriding each other.
+- Opening or dropping a YFT now loads its nearby matching vehicle settings, including timing, lens scale and facing, instead of retaining the previous vehicle's sequence. Other model formats keep the current sequence.
+- Real model lenses with missing or incomplete scale settings stay at their authored size and show a visible warning. Correct imported scales, including 10 and 100, remain unchanged; new sequence exports retain their existing default.
+- The preview identifies the active sequence and siren settings ID to help spot settings from a different vehicle.
+
 ## 0.3.1 - Early Access - 2026-10-19
 
 - Added a self-contained Windows setup tool modeled on Duck Studio, with per-user installation, verified files, Start menu access, repair and an owned-file uninstaller that keeps projects.

@@ -58,6 +58,45 @@ fn lens_scaling_matches_imported_carcols_and_default_exports() {
     model.meshes[0].siren_ids = vec![1];
     assert!(model.validate().is_err());
 }
+
+#[test]
+fn real_lenses_do_not_use_export_defaults_when_vehicle_settings_are_missing() {
+    let mut model =
+        models::parse_obj("v 0 0 0\nv 1 0 0\nv 0 1 0\nvt 0 0\nvt 1 0\nvt 0 1\nf 1/1 2/2 3/3")
+            .unwrap();
+    model.meshes[0].siren_ids = vec![1; 3];
+    model.sirens.push(sirens::SirenAnchor {
+        id: 1,
+        position: [0.; 3],
+    });
+    let mut pattern = Pattern::default();
+    assert!(sirens::missing_surface_scales(&model, &pattern));
+    assert_eq!(
+        sirens::markers(Some(&model), &pattern, &Default::default(), 0)[0].surface_scale,
+        1.
+    );
+    assert_eq!(sirens::surface_scales(&pattern)[0], 100.); // New exports retain their documented default.
+    for scale in [10., 100.] {
+        pattern.source_xml = Some(format!(
+            "<CVehicleModelInfoVarGlobal><Sirens><Item><sirens><Item><scale value=\"true\"/><scaleFactor value=\"{scale}\"/></Item></sirens></Item></Sirens></CVehicleModelInfoVarGlobal>"
+        ));
+        assert!(!sirens::missing_surface_scales(&model, &pattern));
+        assert_eq!(
+            sirens::markers(Some(&model), &pattern, &Default::default(), 0)[0].surface_scale,
+            scale
+        );
+    }
+    // An incomplete or invalid source must not silently enlarge other real lenses.
+    model.meshes[0].siren_ids = vec![2; 3];
+    model.sirens[0].id = 2;
+    assert!(sirens::missing_surface_scales(&model, &pattern));
+    assert_eq!(
+        sirens::markers(Some(&model), &pattern, &Default::default(), 0)[0].surface_scale,
+        1.
+    );
+    pattern.source_xml = Some("invalid XML".into());
+    assert!(sirens::missing_surface_scales(&model, &pattern));
+}
 #[test]
 fn imported_vehicles_hide_missing_siren_slots_but_keep_schematic_and_manual_positions() {
     use duck_workshop::{
