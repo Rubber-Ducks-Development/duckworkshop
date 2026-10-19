@@ -14,6 +14,7 @@
   <img src="https://img.shields.io/badge/platform-Windows%20x64-0078D4?style=flat-square" alt="Platform: Windows x64">
   <img src="https://img.shields.io/badge/built%20with-Rust-D7B974?style=flat-square" alt="Built with Rust">
   <img src="https://img.shields.io/badge/source-0.3.0-555555?style=flat-square" alt="Source version 0.3.0">
+  <img src="https://img.shields.io/badge/status-Early%20Access-D7B974?style=flat-square" alt="Status: Early access">
   <img src="https://img.shields.io/badge/license-MIT-3A3A3A?style=flat-square" alt="License: MIT; third-party notices apply">
 </p>
 
@@ -27,6 +28,8 @@
 </p>
 
 > [!NOTE]
+> **Early access.** Duck Workshop is actively being developed. Features and vehicle compatibility may change, and the 3D preview should be checked against the target vehicle in FiveM.
+>
 > **Release preparation.** The source is 0.3.0; the Windows release is currently a draft and the repository is private. [GitHub Releases](https://github.com/Rubber-Ducks-Development/duckworkshop/releases) will provide downloads once published and accessible. The tools process files locally; only optional update checks use the internet.
 
 <p align="center">
@@ -59,10 +62,10 @@ No vehicle models or private workspaces are shown. See [image sources](docs/imag
 
 | Tool | What you can do |
 | --- | --- |
-| UV Editor | Import a supported mapped model, select meshes/LOD/UV channel, inspect per-material textures in 3D, and export PNG/SVG templates or material PNGs in a ZIP. |
+| UV Editor | Automatically isolate the livery material and UV channel, then export a 4096px colored surface guide with fine wireframe lines, or choose transparent outlines and wireframes. |
 | Live textures | Load PNG, JPG, PSD, DDS and other supported images. Linked textures reload after a stable save, so artwork changes appear while you keep painting in another editor. |
-| Lightboard | Paint or erase a 32-step sequencer, add up to six colors per light, undo/redo, invert, shift, copy and preview timing. Import/export carcols and retain unrelated XML. |
-| Stripe Designer | Create symmetric chevrons or diagonal stripes, set colors/dimensions/angle/opacity and export transparent PNGs up to 8192 pixels per dimension. Clip to the current UV selection when a model is loaded. |
+| Lightboard | Paint a 32-step sequencer and preview flashing lightbar lens surfaces with their vehicle textures, glow and numbered labels. Use Night or Lightbar view, resize and pin the separate preview window. Import/export carcols and retain unrelated XML. |
+| Stripe Designer | Choose six warning-stripe presets, mirror across an adjustable seam and add honeycomb or 3M 983-style reflective texture. Export transparent PNGs up to 8192 pixels per dimension, optionally clipped to the current UV selection. |
 | Meta Editor | Edit handling, vehicles, carvariations and carcols files. Choose entries, use guided fields or raw XML, validate changes and export individual files or a resource ZIP. |
 | Handling Compare | Match handling entries by name, filter changes and export CSV/JSON. Exact decimal-string comparison catches differences below floating-point precision. |
 | Complete workspaces | Save geometry, patterns, metadata, comparison inputs and texture links in a `.duckworkshop` file. Source texture images remain in their existing locations. |
@@ -98,16 +101,24 @@ maintainer-provided local package.
 | Type | Support and limits |
 | --- | --- |
 | `.duckworkshop` | Native workspace with editor data, imported geometry and links to external textures. Not interchangeable with Studio's `.duckproj`. |
-| Legacy PC `.yft` / `.ydr` | RSC7 YFT version 159 and YDR version 165, including supported fragment drawables. Enhanced/Gen9, encrypted resources and unsupported vertex layouts need another supported conversion path. |
+| Legacy PC `.yft` / `.ydr` | RSC7 YFT version 162 and YDR version 165, including supported fragment drawables and empty geometry slots. Enhanced/Gen9, encrypted resources and unsupported vertex layouts need another supported conversion path. |
 | CodeWalker XML / mapped OBJ / self-contained GLB | Recover existing UVs and mesh data. Complete finite UVs are required; no FBX, external GLB buffers, OBJ MTL loading or unwrapping. |
 | PNG, JPG, PSD, DDS, TGA, BMP, TIFF, WebP, GIF | Texture preview. PSD favors the saved merged image; PSB/CMYK/32-bit PSD are unsupported. DDS support covers DXT1/3/5. Images are limited to 1 GB and 16384 pixels per side. |
 | Vehicle `.meta` XML | Handling, vehicles, carvariations and carcols; nested and unknown elements are retained by the preserving XML workflow. |
 | PNG / SVG / ZIP / CSV / JSON | Tool-specific exports for UV templates, patterns, resource bundles and handling comparisons. |
 
 The 3D viewer is a texture check, rather than an in-game render. UV recovery does
-not unwrap or modify the source model. Binary/XML previews use raw mesh positions;
-skeletal transforms and native game lighting are not simulated. UV exports cover
-the 0-1 tile. No YDD clothing or YTD dictionary import is provided.
+not unwrap or modify the source model. Native previews apply rest-pose skinning, bone placement and intact fragment transforms.
+CodeWalker XML geometry still uses raw positions; runtime articulation and full game lighting are not simulated. Siren lenses
+use their bone bindings, imported scale factors and carcols facing angles. The lighting preview can read
+nearby legacy PC YTD textures; no standalone YTD editor or YDD clothing import is
+provided. UV exports cover the 0-1 tile.
+
+Use **Import folder** in UV Editor or Lightboard to choose a FiveM vehicle resource,
+then its vehicle and optional `_hi.yft`. The importer resolves texture dictionaries
+and links carvariations sirenSettings to carcols IDs. Invalid, missing or conflicting
+metadata is reported in **Import notes**; it never silently selects another pattern.
+Imported vehicles only show sirens with actual bones or explicit manual positions.
 
 Each color of a Lightboard light exports as its own siren because carcols permits
 one color per siren. The total exported setting supports up to 32 sirens. Check bone

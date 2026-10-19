@@ -41,30 +41,66 @@ pub fn schema(kind: usize) -> (&'static str, &'static str, &'static str) {
 }
 pub fn entries(text: &str, kind: usize) -> Result<Vec<String>> {
     let root = parse_element(text)?;
-    let (expected, container, id) = schema(kind);
+    let locations = entry_locations(&root, kind)?;
+    Ok(locations
+        .iter()
+        .enumerate()
+        .map(|(i, &(container, item))| {
+            let section = root.children[container].as_element().unwrap();
+            let item = section.children[item].as_element().unwrap();
+            let name = item
+                .get_child(schema(kind).2)
+                .and_then(|n| n.get_text())
+                .map(|v| v.to_string())
+                .or_else(|| {
+                    item.get_child("id")
+                        .and_then(|n| n.attributes.get("value"))
+                        .map(|v| format!("ID {v}"))
+                })
+                .unwrap_or_else(|| format!("Entry {}", i + 1));
+            if kind == 3 {
+                format!("{} / {name}", section.name)
+            } else {
+                name
+            }
+        })
+        .collect())
+}
+
+/// Detect the document type from its XML root, regardless of the selected tab.
+pub fn detect_kind(text: &str) -> Result<usize> {
+    let root = parse_element(text)?;
+    (0..4)
+        .find(|&kind| root.name == schema(kind).0)
+        .ok_or_else(|| format!("Unsupported metadata root: {}.", root.name))
+}
+
+fn entry_locations(root: &Element, kind: usize) -> Result<Vec<(usize, usize)>> {
+    let (expected, container, _) = schema(kind);
     if root.name != expected {
         return Err(format!("Expected {expected}."));
     }
-    let items = root
-        .get_child(container)
-        .ok_or("Missing entries container")?;
-    let names = items
+    let containers: &[&str] = if kind == 3 {
+        &["Sirens", "Lights", "Kits"]
+    } else {
+        &[container]
+    };
+    let locations: Vec<_> = root
         .children
         .iter()
-        .filter_map(|n| n.as_element())
-        .filter(|n| n.name == "Item")
         .enumerate()
-        .map(|(i, n)| {
-            n.get_child(id)
-                .and_then(|n| n.get_text())
-                .map(|v| v.to_string())
-                .unwrap_or_else(|| format!("Entry {}", i + 1))
+        .filter_map(|(i, n)| n.as_element().map(|n| (i, n)))
+        .filter(|(_, n)| containers.contains(&n.name.as_str()))
+        .flat_map(|(i, n)| {
+            n.children.iter().enumerate().filter_map(move |(j, n)| {
+                n.as_element().filter(|n| n.name == "Item").map(|_| (i, j))
+            })
         })
-        .collect::<Vec<_>>();
-    if names.is_empty() {
+        .collect();
+    if locations.is_empty() {
         return Err("No editable entries.".into());
     }
-    Ok(names)
+    Ok(locations)
 }
 #[derive(Clone)]
 pub struct Field {
@@ -73,16 +109,13 @@ pub struct Field {
 }
 pub fn fields(text: &str, kind: usize, index: usize) -> Result<Vec<Field>> {
     let root = parse_element(text)?;
-    let item = root
-        .get_child(schema(kind).1)
-        .and_then(|n| {
-            n.children
-                .iter()
-                .filter_map(|n| n.as_element())
-                .filter(|n| n.name == "Item")
-                .nth(index)
-        })
+    let (container, item) = entry_locations(&root, kind)?
+        .get(index)
+        .copied()
         .ok_or("Missing selected entry")?;
+    let item = root.children[container].as_element().unwrap().children[item]
+        .as_element()
+        .unwrap();
     let mut fields = vec![];
     for n in item.children.iter().filter_map(|n| n.as_element()) {
         if n.children.iter().any(|n| n.as_element().is_some()) {
@@ -108,16 +141,13 @@ pub fn fields(text: &str, kind: usize, index: usize) -> Result<Vec<Field>> {
 }
 pub fn update(text: &str, kind: usize, index: usize, fields: &[Field]) -> Result<String> {
     let mut root = parse_element(text)?;
-    let item = root
-        .get_mut_child(schema(kind).1)
-        .and_then(|n| {
-            n.children
-                .iter_mut()
-                .filter_map(|n| n.as_mut_element())
-                .filter(|n| n.name == "Item")
-                .nth(index)
-        })
+    let (container, item) = entry_locations(&root, kind)?
+        .get(index)
+        .copied()
         .ok_or("Missing selected entry")?;
+    let item = root.children[container].as_mut_element().unwrap().children[item]
+        .as_mut_element()
+        .unwrap();
     for f in fields {
         let mut parts = f.path.split('@');
         let name = parts.next().unwrap();
@@ -299,7 +329,7 @@ pub fn vehicles(model: &str, handling: &str) -> String {
         xml_escape(model)
     )
 }
-pub fn variations(model: &str, siren: u16, light: u16) -> String {
+pub fn variations(model: &str, siren: u32, light: u16) -> String {
     format!(
         "<CVehicleModelInfoVariation><variationData><Item><modelName>{}</modelName><colors><Item><indices content=\"char_array\">0 0 0 0 0 0</indices><liveries><Item value=\"true\"/></liveries></Item></colors><kits><Item>0_default_modkit</Item></kits><windowsWithExposedEdges/><plateProbabilities><Probabilities><Item><Name>Standard White</Name><Value value=\"100\"/></Item></Probabilities></plateProbabilities><lightSettings value=\"{light}\"/><sirenSettings value=\"{siren}\"/></Item></variationData></CVehicleModelInfoVariation>",
         xml_escape(model)

@@ -1,9 +1,15 @@
 use crate::{Result, xml_document};
 use serde::{Deserialize, Serialize};
 use std::{io::Read, path::Path};
+mod placement;
+mod texture_dict;
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct Mesh {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub vertex_alpha: Vec<u8>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub siren_ids: Vec<u8>,
     pub name: String,
     pub material: String,
     pub lod: String,
@@ -14,17 +20,116 @@ pub struct Mesh {
 }
 #[derive(Clone, Default, Serialize, Deserialize, Debug)]
 pub struct Model {
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub preview_textures: std::collections::BTreeMap<String, String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sirens: Vec<crate::sirens::SirenAnchor>,
     pub name: String,
     pub meshes: Vec<Mesh>,
     pub warnings: Vec<String>,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub material_info: std::collections::BTreeMap<String, MaterialInfo>,
+}
+
+#[derive(Clone, Default, Serialize, Deserialize, Debug)]
+pub struct MaterialInfo {
+    #[serde(default)]
+    pub render_bucket: u8,
+    pub shader: String,
+    pub diffuse_texture: String,
+    pub secondary_texture: String,
+}
+impl MaterialInfo {
+    pub fn is_light_emissive(&self) -> bool {
+        self.shader.starts_with("vehicle_lightsemissive")
+    }
+    pub fn is_livery(&self) -> bool {
+        self.shader == "vehicle_paint3" && !self.secondary_texture.is_empty()
+    }
+    fn label(&self, index: usize) -> String {
+        let texture = if self.is_livery() {
+            &self.secondary_texture
+        } else {
+            &self.diffuse_texture
+        };
+        if texture.is_empty() {
+            format!("Shader {index} / {}", self.shader)
+        } else {
+            format!("Shader {index} / {texture}")
+        }
+    }
+}
+
+fn shader_hash(name: &str) -> u32 {
+    let mut h = 0u32;
+    for c in name.bytes() {
+        h = h.wrapping_add(c as u32);
+        h = h.wrapping_add(h << 10);
+        h ^= h >> 6;
+    }
+    h = h.wrapping_add(h << 3);
+    h ^= h >> 11;
+    h.wrapping_add(h << 15)
+}
+
+fn shader_name(hash: u32) -> String {
+    [
+        "vehicle_paint1",
+        "vehicle_paint2",
+        "vehicle_paint3",
+        "vehicle_paint4",
+        "vehicle_paint5",
+        "vehicle_paint6",
+        "vehicle_paint7",
+        "vehicle_mesh",
+        "vehicle_badges",
+        "vehicle_tire",
+        "vehicle_vehglass",
+        "vehicle_vehglass_inner",
+        "vehicle_lightsemissive",
+        "vehicle_interior",
+        "vehicle_decal",
+        "vehicle_licenseplate",
+        "ped_alpha",
+    ]
+    .into_iter()
+    .find(|name| shader_hash(name) == hash)
+    .map(str::to_string)
+    .unwrap_or_else(|| format!("0x{hash:08X}"))
 }
 impl Model {
     pub fn validate(&self) -> Result<()> {
+        if self.preview_textures.len() > 256
+            || self
+                .preview_textures
+                .values()
+                .map(String::len)
+                .sum::<usize>()
+                > 48 * 1024 * 1024
+        {
+            return Err("Preview textures exceed the project limit".into());
+        }
+        if self.sirens.len() > 1024
+            || self
+                .sirens
+                .iter()
+                .any(|a| !(1..=32).contains(&a.id) || a.position.iter().any(|v| !v.is_finite()))
+        {
+            return Err("Invalid model siren positions".into());
+        }
         if self.meshes.is_empty() {
             return Err("No triangle geometry found.".into());
         }
         let mut count = 0;
         for m in &self.meshes {
+            if !m.vertex_alpha.is_empty() && m.vertex_alpha.len() != m.positions.len() {
+                return Err("Invalid vertex alpha channel".into());
+            }
+            if !m.siren_ids.is_empty()
+                && (m.siren_ids.len() != m.positions.len() || m.siren_ids.iter().any(|&id| id > 32))
+            {
+                return Err("Invalid siren surface bindings".into());
+            }
             count += m.indices.len();
             if m.positions.is_empty()
                 || m.positions.iter().flatten().any(|v| !v.is_finite())
@@ -84,10 +189,16 @@ pub fn load(path: &Path) -> Result<Model> {
         };
     model.validate()?;
     model.name = filename;
+    if ext == "yft" || ext == "ydr" {
+        texture_dict::load_nearby(path, &mut model);
+    }
+    model.validate()?;
     Ok(model)
 }
 fn mesh(name: &str, material: &str) -> Mesh {
     Mesh {
+        vertex_alpha: vec![],
+        siren_ids: vec![],
         name: name.into(),
         material: material.into(),
         lod: "High".into(),
@@ -190,6 +301,104 @@ fn number(s: &str) -> Result<f32> {
 pub fn parse_xml(text: &str) -> Result<Model> {
     let doc = xml_document(text)?;
     let mut out = Model::default();
+    let mut bone_channels = vec![];
+    let materials: Vec<_> = doc
+        .descendants()
+        .find(|n| n.has_tag_name("Shaders"))
+        .map(|shaders| {
+            shaders
+                .children()
+                .filter(|n| n.has_tag_name("Item"))
+                .map(|node| {
+                    let shader = node
+                        .children()
+                        .find(|n| n.has_tag_name("Name"))
+                        .and_then(|n| n.text())
+                        .unwrap_or("")
+                        .trim_end_matches(".sps")
+                        .to_ascii_lowercase();
+                    let texture = |sampler| {
+                        node.descendants()
+                            .find(|n| {
+                                n.attribute("name")
+                                    .is_some_and(|s| s.eq_ignore_ascii_case(sampler))
+                            })
+                            .and_then(|n| n.children().find(|n| n.has_tag_name("Name")))
+                            .and_then(|n| n.text())
+                            .unwrap_or("")
+                            .to_string()
+                    };
+                    MaterialInfo {
+                        render_bucket: node
+                            .children()
+                            .find(|n| n.has_tag_name("RenderBucket"))
+                            .and_then(|n| n.attribute("value"))
+                            .and_then(|v| v.parse().ok())
+                            .unwrap_or(0),
+                        shader,
+                        diffuse_texture: texture("DiffuseSampler"),
+                        secondary_texture: texture("DiffuseSampler2"),
+                    }
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    if let Some(bones) = doc
+        .descendants()
+        .find(|n| n.has_tag_name("Skeleton"))
+        .and_then(|n| n.children().find(|c| c.has_tag_name("Bones")))
+    {
+        let poses = (|| -> Result<Vec<crate::sirens::BonePose>> {
+            let mut poses = vec![];
+            for bone in bones.children().filter(|n| n.has_tag_name("Item")) {
+                let child = |name| bone.children().find(|n| n.has_tag_name(name));
+                let component = |tag, attribute, default| -> Result<f32> {
+                    child(tag)
+                        .and_then(|n| n.attribute(attribute))
+                        .map(number)
+                        .unwrap_or(Ok(default))
+                };
+                poses.push(crate::sirens::BonePose {
+                    name: child("Name").and_then(|n| n.text()).unwrap_or("").into(),
+                    parent: child("ParentIndex")
+                        .and_then(|n| n.attribute("value").or(n.text()))
+                        .unwrap_or("-1")
+                        .trim()
+                        .parse()
+                        .map_err(|_| "Invalid bone parent")?,
+                    position: [
+                        component("Translation", "x", 0.)?,
+                        component("Translation", "y", 0.)?,
+                        component("Translation", "z", 0.)?,
+                    ],
+                    rotation: [
+                        component("Rotation", "x", 0.)?,
+                        component("Rotation", "y", 0.)?,
+                        component("Rotation", "z", 0.)?,
+                        component("Rotation", "w", 1.)?,
+                    ],
+                    scale: [
+                        component("Scale", "x", 1.)?,
+                        component("Scale", "y", 1.)?,
+                        component("Scale", "z", 1.)?,
+                    ],
+                });
+                if poses.len() > 4096 {
+                    return Err("Invalid skeleton bone count".into());
+                }
+            }
+            Ok(poses)
+        })();
+        match poses.and_then(|p| {
+            bone_channels = crate::sirens::bone_channels(&p)?;
+            crate::sirens::bone_anchors(&p)
+        }) {
+            Ok(anchors) => out.sirens = anchors,
+            Err(error) => out
+                .warnings
+                .push(format!("Siren bones unavailable: {error}")),
+        }
+    }
     for vb in doc.descendants().filter(|n| n.has_tag_name("VertexBuffer")) {
         let Some(g) = vb.parent() else { continue };
         let layout = vb
@@ -225,10 +434,37 @@ pub fn parse_xml(text: &str) -> Result<Model> {
             .find(|n| n.has_tag_name("ShaderIndex"))
             .and_then(|n| n.attribute("value"))
             .unwrap_or("0");
-        let mut m = mesh(
-            &format!("Geometry {}", out.meshes.len() + 1),
-            &format!("Shader {shader}"),
-        );
+        let info = shader
+            .parse::<usize>()
+            .ok()
+            .and_then(|i| materials.get(i).map(|m| (i, m)));
+        let material = if let Some((index, info)) = info {
+            let label = info.label(index);
+            out.material_info.insert(label.clone(), info.clone());
+            label
+        } else {
+            format!("Shader {shader}")
+        };
+        let emissive = info.is_some_and(|(_, info)| info.is_light_emissive());
+        let rigid_bone = g
+            .ancestors()
+            .skip(1)
+            .find_map(|n| n.children().find(|n| n.has_tag_name("BoneIndex")))
+            .and_then(|n| n.attribute("value"))
+            .and_then(|n| n.parse::<usize>().ok())
+            .unwrap_or(0);
+        let palette = g
+            .children()
+            .find(|n| n.has_tag_name("BoneIDs"))
+            .and_then(|n| n.text())
+            .unwrap_or("")
+            .split_whitespace()
+            .map(|s| {
+                s.parse::<usize>()
+                    .map_err(|_| "Invalid XML bone palette".into())
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let mut m = mesh(&format!("Geometry {}", out.meshes.len() + 1), &material);
         for a in g.ancestors() {
             if a.is_element() {
                 let n = a.tag_name().name();
@@ -247,6 +483,37 @@ pub fn parse_xml(text: &str) -> Result<Model> {
                 return Err("XML vertex row does not match Layout.".into());
             }
             m.positions.push([nums[p], nums[p + 1], nums[p + 2]]);
+            if let Some(&color) = offsets.get("Colour0") {
+                let alpha = nums[color + 3];
+                if !(0.0..=255.).contains(&alpha) {
+                    return Err("Invalid XML vertex alpha".into());
+                }
+                m.vertex_alpha.push(alpha.round() as u8);
+            }
+            if emissive {
+                let bone = if let (Some(&w), Some(&i)) =
+                    (offsets.get("BlendWeights"), offsets.get("BlendIndices"))
+                {
+                    let slot = (0..4)
+                        .max_by(|&a, &b| nums[w + a].total_cmp(&nums[w + b]))
+                        .unwrap_or(0);
+                    let index = nums[i + slot];
+                    if !index.is_finite() || index < 0. || index.fract() != 0. || index > 4095. {
+                        return Err("Invalid XML blend index".into());
+                    }
+                    if palette.is_empty() {
+                        index as usize
+                    } else {
+                        *palette
+                            .get(index as usize)
+                            .ok_or("Invalid XML bone palette index")?
+                    }
+                } else {
+                    rigid_bone
+                };
+                m.siren_ids
+                    .push(bone_channels.get(bone).copied().unwrap_or(0));
+            }
             for c in 0..8 {
                 if let Some(&u) = offsets.get(format!("TexCoord{c}").as_str()) {
                     while m.uvs.len() <= c {
@@ -365,6 +632,116 @@ struct Reader {
     gfx: usize,
 }
 impl Reader {
+    fn bone_poses(&self, drawable: usize) -> Result<Vec<crate::sirens::BonePose>> {
+        let Some(skeleton) = self.ptr(drawable + 0x18)? else {
+            return Ok(vec![]);
+        };
+        let count = self.u16(skeleton + 0x5e)? as usize;
+        if count == 0 {
+            return Ok(vec![]);
+        }
+        if count > 4096 {
+            return Err("Invalid skeleton bone count".into());
+        }
+        let bones = self.req(skeleton + 0x20)?;
+        let mut poses = Vec::with_capacity(count);
+        for i in 0..count {
+            let b = bones + i * 80;
+            let name = self
+                .ptr(b + 0x38)?
+                .map(|n| self.string(n))
+                .transpose()?
+                .unwrap_or_default();
+            poses.push(crate::sirens::BonePose {
+                name,
+                parent: i16::from_le_bytes(self.bytes(b + 0x32)?),
+                position: [
+                    self.f32(b + 0x10)?,
+                    self.f32(b + 0x14)?,
+                    self.f32(b + 0x18)?,
+                ],
+                rotation: [
+                    self.f32(b)?,
+                    self.f32(b + 4)?,
+                    self.f32(b + 8)?,
+                    self.f32(b + 12)?,
+                ],
+                scale: [
+                    self.f32(b + 0x20)?,
+                    self.f32(b + 0x24)?,
+                    self.f32(b + 0x28)?,
+                ],
+            });
+        }
+        Ok(poses)
+    }
+    fn siren_bones(&self, drawable: usize) -> Result<Vec<crate::sirens::SirenAnchor>> {
+        crate::sirens::bone_anchors(&self.bone_poses(drawable)?)
+    }
+    fn string(&self, offset: usize) -> Result<String> {
+        let bytes = self
+            .data
+            .get(offset..)
+            .ok_or("Texture name is outside the model")?;
+        let length = bytes
+            .iter()
+            .take(256)
+            .position(|&b| b == 0)
+            .ok_or("Invalid texture name")?;
+        Ok(String::from_utf8_lossy(&bytes[..length]).into_owned())
+    }
+    fn materials(&self, drawable: usize) -> Result<Vec<MaterialInfo>> {
+        let Some(group) = self.ptr(drawable + 0x10)? else {
+            return Ok(vec![]);
+        };
+        let count = self.u16(group + 0x18)? as usize;
+        if count == 0 {
+            return Ok(vec![]);
+        }
+        if count > 4096 {
+            return Err("Invalid shader count".into());
+        }
+        let array = self.req(group + 0x10)?;
+        let mut materials = vec![MaterialInfo::default(); count];
+        for (index, info) in materials.iter_mut().enumerate() {
+            let Some(shader) = self.ptr(array + index * 8)? else {
+                continue;
+            };
+            info.shader = shader_name(self.u32(shader + 8)?);
+            info.render_bucket = self.bytes::<1>(shader + 0x11)?[0];
+            let count = self.bytes::<1>(shader + 0x10)?[0] as usize;
+            if count == 0 {
+                continue;
+            }
+            let parameters = self.req(shader)?;
+            let mut hashes = parameters + count * 16;
+            for i in 0..count {
+                hashes += self.bytes::<1>(parameters + i * 16)?[0] as usize * 16;
+            }
+            for i in 0..count {
+                if self.bytes::<1>(parameters + i * 16)?[0] != 0 {
+                    continue;
+                }
+                let hash = self.u32(hashes + i * 4)?;
+                if hash != shader_hash("diffusesampler") && hash != shader_hash("diffusesampler2") {
+                    continue;
+                }
+                let Some(texture) = self.ptr(parameters + i * 16 + 8)? else {
+                    continue;
+                };
+                let Some(name) = self.ptr(texture + 0x28)? else {
+                    continue;
+                };
+                let name = self.string(name)?;
+                if hash == shader_hash("diffusesampler2") {
+                    info.secondary_texture = name;
+                } else {
+                    info.diffuse_texture = name;
+                }
+            }
+        }
+        Ok(materials)
+    }
     fn bytes<const N: usize>(&self, o: usize) -> Result<[u8; N]> {
         self.data
             .get(o..o.checked_add(N).ok_or("Buffer overflow")?)
@@ -425,7 +802,14 @@ pub fn parse_rsc7(bytes: &[u8], ext: &str) -> Result<Model> {
     }
     let h = |o| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap());
     let version = h(4);
-    if ![159, 165].contains(&version) {
+    // Versions are specific to the resource type: 162 is legacy PC YFT,
+    // 165 is legacy PC YDR. YDR 159/154 and YFT 171 use Gen9 layouts.
+    let supported = match ext.to_ascii_lowercase().as_str() {
+        "yft" => version == 162,
+        "ydr" => version == 165,
+        _ => return Err("Expected a YFT or YDR model extension.".into()),
+    };
+    if !supported {
         return Err(format!(
             "Unsupported RSC7 version {version}. Use legacy PC YFT/YDR or CodeWalker XML."
         ));
@@ -446,48 +830,39 @@ pub fn parse_rsc7(bytes: &[u8], ext: &str) -> Result<Model> {
     }
     let r = Reader { data, sys, gfx };
     let mut out = Model::default();
-    let mut drawables = Vec::new();
-    if ext.eq_ignore_ascii_case("ydr") {
-        drawables.push(0)
-    } else {
-        if let Some(d) = r.ptr(0x30)? {
-            drawables.push(d)
-        }
-        let count = r.u32(0x48)?;
-        if count > 4096 {
-            return Err("Invalid drawable count".into());
-        }
-        if let Some(a) = r.ptr(0x38)? {
-            for i in 0..count as usize {
-                if let Some(d) = r.ptr(a + i * 8)? {
-                    drawables.push(d)
-                }
+    let drawables = r.placed_drawables(ext)?;
+    let root = drawables
+        .first()
+        .map(|d| d.address)
+        .ok_or("No drawable in model")?;
+    // Always use the actual root skeleton, never whichever pointer sorts first.
+    out.sirens = r.siren_bones(root)?;
+    let root_bones = r.bone_poses(root)?;
+    let root_materials = r.materials(root).unwrap_or_default();
+    for (di, placed) in drawables.iter().enumerate() {
+        let d = &placed.address;
+        let materials = match r.materials(*d) {
+            Ok(materials) if materials.is_empty() && *d != root => root_materials.clone(),
+            Ok(materials) => materials,
+            Err(error) => {
+                out.warnings.push(format!(
+                    "Material names unavailable for drawable {}: {error}",
+                    di + 1
+                ));
+                vec![]
             }
-        }
-        // Fragment physics contains separate pristine/damaged part drawables.
-        // Include their geometry for UV recovery, deduplicating shared pointers.
-        if let Some(group) = r.ptr(0xf0)? {
-            for level in 0..3 {
-                if let Some(lod) = r.ptr(group + 0x10 + level * 8)? {
-                    let count = r.bytes::<1>(lod + 0x11d)?[0] as usize;
-                    if let Some(array) = r.ptr(lod + 0xd0)? {
-                        for i in 0..count {
-                            if let Some(child) = r.ptr(array + i * 8)? {
-                                for offset in [0xa0, 0xa8] {
-                                    if let Some(drawable) = r.ptr(child + offset)? {
-                                        drawables.push(drawable);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-    drawables.sort_unstable();
-    drawables.dedup();
-    for (di, d) in drawables.iter().enumerate() {
+        };
+        let own_bones = r.bone_poses(*d)?;
+        let bones = if own_bones.is_empty() {
+            &root_bones
+        } else {
+            &own_bones
+        };
+        let bone_channels = crate::sirens::bone_channels(bones)?;
+        let worlds = crate::sirens::bone_worlds(bones)?;
+        let skeleton_drawable = if own_bones.is_empty() { root } else { *d };
+        let skin = r.skin_matrices(skeleton_drawable, &worlds)?;
+        let rigid = r.rigid_matrices(skeleton_drawable, ext, &worlds)?;
         for li in 0..4 {
             let Some(list) = r.ptr(d + 0x50 + li * 8)? else {
                 continue;
@@ -513,6 +888,15 @@ pub fn parse_rsc7(bytes: &[u8], ext: &str) -> Result<Model> {
                     return Err("Invalid geometry count".into());
                 }
                 let mapping = r.ptr(model + 0x20)?;
+                let binding = r.u32(model + 0x28)?;
+                let rigid_bone = (binding >> 24) as usize;
+                let skinned = (binding >> 8) & 255 != 0;
+                let transform = placed.transform.unwrap_or_else(|| {
+                    rigid
+                        .get(rigid_bone)
+                        .copied()
+                        .unwrap_or(glam::Mat4::IDENTITY)
+                });
                 for gi in 0..n as usize {
                     let Some(g) = r.ptr(geoms + gi * 8)? else {
                         continue;
@@ -521,14 +905,15 @@ pub fn parse_rsc7(bytes: &[u8], ext: &str) -> Result<Model> {
                     let ib = r.req(g + 0x38)?;
                     let stride = r.u16(vb + 8)? as usize;
                     let vc = r.u32(vb + 0x18)? as usize;
-                    let decl = r.req(vb + 0x30)?;
-                    let vdata = match r.ptr(vb + 0x10)? {
-                        Some(p) => p,
-                        None => r.req(vb + 0x20)?,
-                    };
-                    let idata = r.req(ib + 0x10)?;
                     let ic = r.u32(ib + 8)? as usize;
-                    if stride == 0
+                    // Vehicle exports can retain empty geometry slots. They have
+                    // no triangles to recover and may omit their data pointers.
+                    if vc == 0 && ic == 0 {
+                        continue;
+                    }
+                    if vc == 0
+                        || ic == 0
+                        || stride == 0
                         || stride > 512
                         || vc > 2_000_000
                         || ic > 6_000_000
@@ -536,6 +921,12 @@ pub fn parse_rsc7(bytes: &[u8], ext: &str) -> Result<Model> {
                     {
                         return Err("Invalid geometry dimensions".into());
                     }
+                    let decl = r.req(vb + 0x30)?;
+                    let vdata = match r.ptr(vb + 0x10)? {
+                        Some(p) => p,
+                        None => r.req(vb + 0x20)?,
+                    };
+                    let idata = r.req(ib + 0x10)?;
                     if vdata + vc * stride > total || idata + ic * 2 > total {
                         return Err("Truncated geometry data".into());
                     }
@@ -565,18 +956,94 @@ pub fn parse_rsc7(bytes: &[u8], ext: &str) -> Result<Model> {
                     } else {
                         0
                     };
+                    let material = if let Some(info) = materials
+                        .get(shader as usize)
+                        .filter(|info| !info.shader.is_empty())
+                    {
+                        let label = info.label(shader as usize);
+                        out.material_info.insert(label.clone(), info.clone());
+                        label
+                    } else {
+                        format!("Shader {shader}")
+                    };
                     let mut m = mesh(
                         &format!("Drawable {} / mesh {}.{}", di + 1, mi + 1, gi + 1),
-                        &format!("Shader {shader}"),
+                        &material,
                     );
+                    let emissive = out
+                        .material_info
+                        .get(&material)
+                        .is_some_and(MaterialInfo::is_light_emissive);
+                    let palette_count = r.u16(g + 0x72)? as usize;
+                    if palette_count > 4096 {
+                        return Err("Invalid bone palette".into());
+                    }
+                    let palette = if palette_count > 0 {
+                        let start = r.req(g + 0x68)?;
+                        (0..palette_count)
+                            .map(|i| r.u16(start + i * 2))
+                            .collect::<Result<Vec<_>>>()?
+                    } else {
+                        vec![]
+                    };
                     m.lod = ["High", "Med", "Low", "VeryLow"][li].into();
                     for v in 0..vc {
                         let o = vdata + v * stride;
-                        m.positions.push([
+                        let raw = glam::Vec3::new(
                             r.component(o + po, pt, 0)?,
                             r.component(o + po, pt, 1)?,
                             r.component(o + po, pt, 2)?,
-                        ]);
+                        );
+                        let position = if skinned {
+                            if let (Some((wo, 8 | 9)), Some((io, 8 | 9))) = (attrs[1], attrs[2]) {
+                                placement::skin_position(
+                                    raw,
+                                    r.bytes::<4>(o + wo)?,
+                                    r.bytes::<4>(o + io)?,
+                                    &palette,
+                                    &skin,
+                                )?
+                            } else {
+                                raw
+                            }
+                        } else {
+                            transform.transform_point3(raw)
+                        };
+                        m.positions.push(position.to_array());
+                        if let Some((co, ct)) = attrs[4] {
+                            let alpha = match ct {
+                                8 | 9 => r.bytes::<4>(o + co)?[3],
+                                3 | 7 => {
+                                    (r.component(o + co, ct, 3)?.clamp(0., 1.) * 255.).round() as u8
+                                }
+                                _ => 255,
+                            };
+                            m.vertex_alpha.push(alpha);
+                        }
+                        if emissive {
+                            let bone = if let (Some((wo, 8 | 9)), Some((io, 8 | 9))) =
+                                (attrs[1], attrs[2])
+                            {
+                                let weights = r.bytes::<4>(o + wo)?;
+                                let indices = r.bytes::<4>(o + io)?;
+                                let slot = (0..4).max_by_key(|&i| weights[i]).unwrap_or(0);
+                                let index = indices[slot] as usize;
+                                if weights[slot] == 0 {
+                                    rigid_bone
+                                } else if palette.is_empty() {
+                                    index
+                                } else {
+                                    *palette
+                                        .get(index)
+                                        .ok_or("Invalid vertex bone palette index")?
+                                        as usize
+                                }
+                            } else {
+                                rigid_bone
+                            };
+                            m.siren_ids
+                                .push(bone_channels.get(bone).copied().unwrap_or(0));
+                        }
                         for c in 0..8 {
                             if let Some((uo, ut)) = attrs[c + 6] {
                                 while m.uvs.len() <= c {
@@ -600,7 +1067,11 @@ pub fn parse_rsc7(bytes: &[u8], ext: &str) -> Result<Model> {
             }
         }
     }
-    out.warnings.push("Legacy PC model, including fragment part geometry. Preview uses raw mesh positions without articulated transforms. Enhanced/Gen9 models require CodeWalker XML.".into());
+    out.warnings.push("Legacy PC model with rest-pose skinning and pristine fragment placement. Runtime suspension, damage and scripted attachments are not simulated. Enhanced/Gen9 models require CodeWalker XML.".into());
     out.validate()?;
     Ok(out)
+}
+
+pub fn load_preview_textures(paths: &[std::path::PathBuf], model: &mut Model) {
+    texture_dict::load_paths(paths, model);
 }

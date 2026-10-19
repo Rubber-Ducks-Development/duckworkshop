@@ -142,7 +142,7 @@ impl Channel {
 pub struct Pattern {
     pub version: u32,
     pub name: String,
-    pub id: u16,
+    pub id: u32,
     pub bpm: f32,
     pub channels: Vec<Channel>,
     pub source_xml: Option<String>,
@@ -300,7 +300,9 @@ impl Pattern {
         let p = Self {
             version: 1,
             name: val(item, "name"),
-            id: val(item, "id").parse().map_err(|_| "Invalid siren ID")?,
+            id: val(item, "id")
+                .parse()
+                .map_err(|_| "Siren ID must be an unsigned 32-bit integer")?,
             bpm: val(item, "sequencerBpm").parse().unwrap_or(600.),
             channels,
             source_xml: Some(text.into()),

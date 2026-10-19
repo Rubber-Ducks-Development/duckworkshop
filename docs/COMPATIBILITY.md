@@ -11,7 +11,7 @@ Reviewed against the local Duck Studio 2.1.3 source (project format migration) a
 | PNG images | Shared | Studio can export its textures as PNG; Workshop can load them and export transparent stripe/UV PNGs for Studio |
 | Layered artwork | Partial | Both accept PSD. Workshop has no PSB support. Prefer a flattened PNG for exchange |
 | DDS images | Partial | Workshop decodes DXT1/3/5; Studio can produce additional DDS formats. PNG is the dependable interchange path |
-| Native models | Different scope | Workshop reads legacy PC YFT/YDR; Studio edits clothing YDD. Workshop does not read YDD/YTD |
+| Native models | Different scope | Workshop reads legacy PC YFT/YDR with rest-pose/fragment placement and linked PC YTD textures; folder import matches vehicle metadata; Studio edits clothing YDD. Workshop has no YDD importer or standalone YTD editor |
 | CodeWalker XML | Format dependent | Workshop supports drawable/fragment mesh XML. Studio's exported clothing dictionary XML is not an advertised direct import path |
 | Saved workspaces | Separate | `.duckworkshop` and `.duckproj` use different schemas and cannot open one another |
 | FiveM resources | Complementary | Workshop creates vehicle metadata/resources; Studio creates clothing/tattoo resources. Deploy as separate resources with unique names |

@@ -4,6 +4,7 @@ pub mod models;
 pub mod patterns;
 pub mod project;
 pub mod render;
+pub mod sirens;
 pub mod textures;
 pub mod updates;
 
@@ -31,3 +32,5 @@ pub fn xml_escape(text: &str) -> String {
         .replace('"', "&quot;")
         .replace('\'', "&apos;")
 }
+
+pub mod vehicle_resource;

@@ -111,15 +111,6 @@ impl Workbench {
 
     pub(super) fn sequencer(&mut self, ui: &mut egui::Ui) {
         ui.set_style(sequence_style(ui));
-        if self.blink_play {
-            self.blink_step = (((ui.input(|i| i.time) - self.blink_start)
-                * self.session.pattern.bpm as f64
-                / 60.)
-                .floor() as usize)
-                % 32;
-            ui.ctx()
-                .request_repaint_after(std::time::Duration::from_millis(16));
-        }
         ui.horizontal(|ui| {
             if primary(
                 ui,
@@ -207,7 +198,7 @@ impl Workbench {
                 |ui| {
                     ui.set_min_width(width);
                     ui.set_max_width(width);
-                    self.light_preview(ui);
+                    self.siren_preview_panel(ui);
                     ui.add_space(14.);
                     ui.horizontal(|ui| {
                         ui.label(RichText::new("PATTERN").strong().small().color(DIM_TEXT));
@@ -245,7 +236,7 @@ impl Workbench {
             .show(ui, |ui| {
                 ui.label("Siren ID");
                 changed |= ui
-                    .add(egui::DragValue::new(&mut self.session.pattern.id).range(1..=65535))
+                    .add(egui::DragValue::new(&mut self.session.pattern.id).range(1..=u32::MAX))
                     .changed();
                 ui.end_row();
                 ui.label("BPM");
@@ -610,85 +601,6 @@ impl Workbench {
             );
         }
         changed
-    }
-
-    fn light_preview(&mut self, ui: &mut egui::Ui) {
-        let (response, painter) =
-            ui.allocate_painter(Vec2::new(ui.available_width(), 140.), Sense::hover());
-        let rect = response.rect;
-        painter.rect_filled(rect, 6., GRID_BG);
-        painter.text(
-            rect.left_top() + Vec2::new(16., 13.),
-            Align2::LEFT_TOP,
-            "LIGHT PREVIEW",
-            egui::FontId::proportional(11.),
-            DIM_TEXT,
-        );
-        let count = self.session.pattern.channels.len();
-        let gap = 6.;
-        let width = ((rect.width() - 44. - gap * (count - 1) as f32) / count as f32).min(80.);
-        let origin = rect.center().x - (count as f32 * width + (count - 1) as f32 * gap) / 2.;
-        let mut select = None;
-        for (i, channel) in self.session.pattern.channels.iter().enumerate() {
-            let r = Rect::from_min_size(
-                Pos2::new(origin + i as f32 * (width + gap), rect.top() + 52.),
-                Vec2::new(width, 32.),
-            );
-            let lit = channel.step(self.blink_step).map(|i| channel.color_at(i));
-            let on = lit.is_some();
-            let color = rgb(lit.unwrap_or(channel.color));
-            if let Some(c) = lit {
-                for spread in (1..=4).rev() {
-                    painter.rect_filled(
-                        r.expand(spread as f32 * 3.),
-                        5.,
-                        Color32::from_rgba_unmultiplied(c[0], c[1], c[2], (14 / spread) as u8),
-                    );
-                }
-            }
-            painter.rect_filled(
-                r,
-                3.,
-                if on {
-                    color
-                } else {
-                    Color32::from_rgb(0x3A, 0x3A, 0x3C)
-                },
-            );
-            if on {
-                painter.rect_filled(r.shrink(5.), 1., Color32::from_white_alpha(150));
-            }
-            if i == self.blink_selected {
-                painter.rect_stroke(
-                    r.expand(3.),
-                    5.,
-                    Stroke::new(1.0_f32, ACCENT),
-                    egui::StrokeKind::Outside,
-                );
-            }
-            painter.text(
-                r.center_bottom() + Vec2::new(0., 12.),
-                Align2::CENTER_TOP,
-                format!("{:02}", i + 1),
-                egui::FontId::monospace(11.),
-                DIM_TEXT,
-            );
-            let response = ui.interact(r, ui.id().with(("preview-light", i)), Sense::click());
-            response.widget_info(|| {
-                egui::WidgetInfo::labeled(
-                    egui::WidgetType::Button,
-                    true,
-                    format!("Select {}", channel.name),
-                )
-            });
-            if response.clicked() {
-                select = Some(i)
-            }
-        }
-        if let Some(i) = select {
-            self.blink_selected = i;
-            self.sync_decimal();
-        }
     }
 
     fn sequence_grid(&mut self, ui: &mut egui::Ui) {

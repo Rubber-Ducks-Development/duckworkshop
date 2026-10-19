@@ -8,8 +8,11 @@ use duck_workshop::{
 use eframe::egui::{self, Align2, Color32, Pos2, Rect, RichText, Sense, Stroke, Vec2};
 mod live;
 mod sequencer;
+mod sirens;
+mod stripes;
 mod theme;
 mod updates;
+mod vehicle_resource;
 mod viewer;
 mod workspace;
 use std::{io::Write, path::PathBuf, sync::mpsc};
@@ -28,11 +31,16 @@ const META_NAMES: [&str; 4] = ["handling", "vehicles", "carvariations", "carcols
 
 enum JobResult {
     Model(Model),
+    VehicleCatalog(duck_workshop::vehicle_resource::Catalog),
+    Vehicle(Box<duck_workshop::vehicle_resource::Imported>),
     Saved(String),
     Project(Box<Project>, PathBuf),
     ProjectSaved(PathBuf),
 }
 pub struct Workbench {
+    vehicle_catalog: Option<duck_workshop::vehicle_resource::Catalog>,
+    vehicle_choice: usize,
+    vehicle_high: bool,
     session: Session,
     tool: usize,
     status: String,
@@ -40,6 +48,7 @@ pub struct Workbench {
     job: Option<mpsc::Receiver<Result<JobResult>>>,
     model: Option<Model>,
     uv_edges: Vec<([f32; 2], [f32; 2])>,
+    uv_faces: Vec<render::UvFace>,
     uv_zoom: f32,
     uv_pan: Vec2,
     uv_texture: bool,
@@ -64,8 +73,16 @@ pub struct Workbench {
     paint_value: Option<Option<usize>>,
     blink_brush: usize,
     chevron_texture: Option<egui::TextureHandle>,
+    stripe_presets: Vec<egui::TextureHandle>,
     chevron_dirty: bool,
-    reflective: bool,
+    siren_camera: viewer::Camera,
+    siren_scene: Option<std::sync::Arc<viewer::SceneMesh>>,
+    siren_embedded: std::collections::BTreeMap<String, std::sync::Arc<image::RgbaImage>>,
+    siren_version: u64,
+    siren_gpu: viewer::SharedGpu,
+    siren_popout: bool,
+    siren_was_lightboard: bool,
+    siren_pin: bool,
     meta_kind: usize,
     meta_index: usize,
     meta_fields: Vec<meta::Field>,
@@ -119,7 +136,13 @@ impl Workbench {
         if session.pattern.validate().is_err() || session.chevron.validate().is_err() {
             session = Session::default();
         }
+        if session.siren_preview.validate().is_err() {
+            session.siren_preview = Default::default();
+        }
         let mut app = Self {
+            vehicle_catalog: None,
+            vehicle_choice: 0,
+            vehicle_high: true,
             session,
             tool: 0,
             status: String::new(),
@@ -127,6 +150,7 @@ impl Workbench {
             job: None,
             model: None,
             uv_edges: vec![],
+            uv_faces: vec![],
             uv_zoom: 1.,
             uv_pan: Vec2::ZERO,
             uv_texture: true,
@@ -151,8 +175,16 @@ impl Workbench {
             paint_value: None,
             blink_brush: 0,
             chevron_texture: None,
+            stripe_presets: vec![],
             chevron_dirty: true,
-            reflective: false,
+            siren_camera: Self::siren_fit_camera(),
+            siren_scene: None,
+            siren_embedded: Default::default(),
+            siren_version: u64::MAX,
+            siren_gpu: Default::default(),
+            siren_popout: false,
+            siren_was_lightboard: false,
+            siren_pin: false,
             meta_kind: 0,
             meta_index: 0,
             meta_fields: vec![],
@@ -220,38 +252,13 @@ impl Workbench {
                 Ok(result) => {
                     self.job = None;
                     match result {
-                        Ok(JobResult::Model(model)) => {
-                            self.status = format!(
-                                "Loaded {} · {} meshes · {} triangles",
-                                model.name,
-                                model.meshes.len(),
-                                model.triangles()
-                            );
-                            self.notice_time = Some(std::time::Instant::now());
-                            self.orient(&model);
-                            let materials: Vec<String> =
-                                render::materials(&model).into_iter().collect();
-                            self.live.retain_materials(&materials);
-                            self.model = Some(model);
-                            self.camera = viewer::Camera::default();
-                            self.view = 1;
-                            self.session.uv.lod = if self
-                                .model
-                                .as_ref()
-                                .unwrap()
-                                .meshes
-                                .iter()
-                                .any(|m| m.lod == "High")
-                            {
-                                "High".into()
-                            } else {
-                                "All".into()
-                            };
-                            self.refresh_uv();
-                            self.uv_zoom = 1.;
-                            self.uv_pan = Vec2::ZERO;
-                            self.error = false;
+                        Ok(JobResult::Model(model)) => self.accept_model(model),
+                        Ok(JobResult::VehicleCatalog(catalog)) => {
+                            self.vehicle_choice = 0;
+                            self.vehicle_catalog = Some(catalog);
+                            self.status = "Choose the vehicle to import".into();
                         }
+                        Ok(JobResult::Vehicle(imported)) => self.accept_vehicle(*imported),
                         Ok(JobResult::Saved(name)) => self.message(Ok(format!("Saved {name}"))),
                         Ok(JobResult::Project(project, path)) => {
                             self.restore_project(*project, path)
@@ -283,6 +290,28 @@ impl Workbench {
             }
         }
     }
+    fn accept_model(&mut self, model: Model) {
+        self.status = format!(
+            "Loaded {} · {} meshes · {} triangles",
+            model.name,
+            model.meshes.len(),
+            model.triangles()
+        );
+        self.notice_time = Some(std::time::Instant::now());
+        self.orient(&model);
+        let materials: Vec<String> = render::materials(&model).into_iter().collect();
+        self.live.retain_materials(&materials);
+        render::select_template(&model, &mut self.session.uv);
+        self.model = Some(model);
+        self.camera = viewer::Camera::default();
+        self.siren_camera = Self::siren_fit_camera();
+        self.session.siren_preview.positions.clear();
+        self.view = 1;
+        self.refresh_uv();
+        self.uv_zoom = 1.;
+        self.uv_pan = Vec2::ZERO;
+        self.error = false;
+    }
     fn import_model(&mut self) {
         if let Some(path) = rfd::FileDialog::new()
             .add_filter(
@@ -295,6 +324,12 @@ impl Workbench {
         }
     }
     fn refresh_uv(&mut self) {
+        self.uv_faces = self
+            .model
+            .as_ref()
+            .filter(|_| self.session.uv.surface_colors)
+            .map(|model| render::uv_faces(model, &self.session.uv))
+            .unwrap_or_default();
         self.uv_edges = self
             .model
             .as_ref()
@@ -304,7 +339,13 @@ impl Workbench {
         self.scene = self
             .model
             .as_ref()
-            .and_then(|m| viewer::build(m, &self.session.uv, self.z_up, self.scene_version))
+            .and_then(|m| {
+                if self.session.uv_whole_vehicle {
+                    viewer::build_vehicle(m, &self.session.uv, self.z_up, self.scene_version)
+                } else {
+                    viewer::build(m, &self.session.uv, self.z_up, self.scene_version)
+                }
+            })
             .map(std::sync::Arc::new);
         self.chevron_dirty = true;
     }
@@ -361,7 +402,8 @@ impl Workbench {
         let Some(model) = self.model.clone() else {
             return;
         };
-        let opt = self.session.uv.clone();
+        let mut opt = self.session.uv.clone();
+        opt.material = None;
         if let Some(path) = save_dialog("uv-materials.zip", "zip") {
             self.start_job(move || {
                 let file = std::fs::File::create(&path).map_err(|e| e.to_string())?;
@@ -399,6 +441,9 @@ impl Workbench {
             if primary(ui, icon_text(icon::IMPORT, "Import Model")).clicked() && self.job.is_none()
             {
                 self.import_model()
+            }
+            if ui.button("Import folder").clicked() && self.job.is_none() {
+                self.import_vehicle_folder();
             }
             if ui
                 .add_enabled(
@@ -454,11 +499,24 @@ impl Workbench {
                                 }
                                 ui.checkbox(&mut self.wire, "Wireframe");
                             } else {
-                                ui.checkbox(&mut self.uv_texture, "Show texture");
+                                ui.checkbox(&mut self.uv_texture, "Show texture")
+                                    .on_hover_text("Show your linked artwork instead of the colored surface guide");
                             }
                         });
                     });
-                    ui.add_space(-6.);
+                    if self.view == 1 {
+                        let previous = self.session.uv_whole_vehicle;
+                        ui.horizontal(|ui| {
+                            ui.label("Preview");
+                            ui.selectable_value(&mut self.session.uv_whole_vehicle, true, "Whole vehicle");
+                            ui.selectable_value(&mut self.session.uv_whole_vehicle, false, "Shell / UV selection")
+                                .on_hover_text("Show only the material and meshes selected for the UV template");
+                        });
+                        if previous != self.session.uv_whole_vehicle {
+                            self.refresh_uv();
+                            self.camera = viewer::Camera::default();
+                        }
+                    }
                     let available = Vec2::new(
                         ui.available_width(),
                         (ui.available_height() - 30.).max(100.),
@@ -539,6 +597,7 @@ impl Workbench {
                             });
                             let file = self.live.for_material(material);
                             let (text, color) = match file {
+                                None if self.siren_embedded.contains_key(material) => ("Imported vehicle texture".to_string(), CAPTION),
                                 None => ("No texture".to_string(), MUTED),
                                 Some(f) if f.loading && f.image.is_none() => {
                                     (format!("Loading {}…", f.name()), CAPTION)
@@ -560,7 +619,11 @@ impl Workbench {
                                     }
                                     tip
                                 })
-                                .unwrap_or_else(|| "Choose an image for this material".into()),
+                                .unwrap_or_else(|| if self.siren_embedded.contains_key(material) {
+                                    "Imported from the vehicle texture dictionary. Choose an image to override it.".into()
+                                } else {
+                                    "Choose an image for this material".into()
+                                }),
                             );
                             ui.horizontal(|ui| {
                                 if ui.small_button("Choose…").clicked() {
@@ -616,6 +679,74 @@ impl Workbench {
         ui.separator();
         section(ui, "TEMPLATE");
         let before = serde_json::to_string(&self.session.uv).unwrap();
+        let previous_style = self.session.uv.surface_colors;
+        egui::ComboBox::from_label("Style")
+            .selected_text(if previous_style {
+                "Colored surface + wireframe"
+            } else {
+                "Lines only"
+            })
+            .show_ui(ui, |ui| {
+                ui.selectable_value(
+                    &mut self.session.uv.surface_colors,
+                    true,
+                    "Colored surface + wireframe",
+                );
+                ui.selectable_value(&mut self.session.uv.surface_colors, false, "Lines only");
+            });
+        if previous_style != self.session.uv.surface_colors {
+            let colored = self.session.uv.surface_colors;
+            render::set_template_style(&mut self.session.uv, colored);
+        }
+        if let Some(model) = &self.model {
+            let previous = self.session.uv.material.clone();
+            egui::ComboBox::from_label("Material")
+                .width(210.)
+                .selected_text(previous.as_deref().unwrap_or("All materials (overlaid)"))
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(
+                        &mut self.session.uv.material,
+                        None,
+                        "All materials (overlaid)",
+                    );
+                    for material in render::materials(model) {
+                        ui.selectable_value(
+                            &mut self.session.uv.material,
+                            Some(material.clone()),
+                            &material,
+                        );
+                    }
+                });
+            if previous != self.session.uv.material {
+                let material = self.session.uv.material.clone();
+                render::select_material(model, &mut self.session.uv, material);
+            }
+            if ui.button("Auto select livery / material").clicked() {
+                render::select_template(model, &mut self.session.uv);
+            }
+            if let Some(info) = self
+                .session
+                .uv
+                .material
+                .as_ref()
+                .and_then(|name| model.material_info.get(name))
+            {
+                let text = if info.is_livery() {
+                    format!("Livery: {} · use UV 1", info.secondary_texture)
+                } else {
+                    format!("{} · {}", info.diffuse_texture, info.shader)
+                };
+                ui.label(RichText::new(text).small().color(MUTED));
+            } else if self.session.uv.material.is_none() {
+                ui.label(
+                    RichText::new(
+                        "Materials overlap here. Choose one texture's material before painting.",
+                    )
+                    .small()
+                    .color(MUTED),
+                );
+            }
+        }
         egui::ComboBox::from_label("LOD")
             .selected_text(&self.session.uv.lod)
             .show_ui(ui, |ui| {
@@ -626,7 +757,12 @@ impl Workbench {
         egui::ComboBox::from_label("UV Channel")
             .selected_text(format!("UV {}", self.session.uv.channel))
             .show_ui(ui, |ui| {
-                for c in 0..8 {
+                let channels = self
+                    .model
+                    .as_ref()
+                    .map(|model| render::uv_channels(model, &self.session.uv))
+                    .unwrap_or_else(|| (0..8).collect());
+                for c in channels {
                     ui.selectable_value(&mut self.session.uv.channel, c, format!("UV {c}"));
                 }
             });
@@ -654,7 +790,8 @@ impl Workbench {
             ui.label("Background");
             ui.color_edit_button_srgba_unmultiplied(&mut self.session.uv.background);
         });
-        ui.checkbox(&mut self.session.uv.boundaries, "Boundary edges only");
+        ui.checkbox(&mut self.session.uv.boundaries, "Island outlines only")
+            .on_hover_text("Hide internal triangle edges for a cleaner painting guide");
         if before != serde_json::to_string(&self.session.uv).unwrap() {
             self.refresh_uv()
         }
@@ -710,6 +847,7 @@ impl Workbench {
         }
         if ui
             .add_enabled(enabled, egui::Button::new("Export SVG"))
+            .on_hover_text("Editable vector lines; colored surface shading is embedded as a PNG")
             .clicked()
         {
             self.uv_export(true)
@@ -821,6 +959,16 @@ impl Workbench {
                 );
             }
         }
+        p.rect_filled(
+            tile,
+            0.,
+            Color32::from_rgba_unmultiplied(
+                self.session.uv.background[0],
+                self.session.uv.background[1],
+                self.session.uv.background[2],
+                self.session.uv.background[3],
+            ),
+        );
         let background = self
             .model
             .as_ref()
@@ -830,9 +978,11 @@ impl Workbench {
                     .find_map(|mesh| self.live.assigned.get(&mesh.material))
                     .cloned()
             });
+        let mut has_texture = false;
         if let Some(path) = background
             && let Some(texture) = self.live.preview(ui.ctx(), &path)
         {
+            has_texture = true;
             p.image(
                 texture,
                 tile,
@@ -856,11 +1006,31 @@ impl Workbench {
             self.session.uv.color[0],
             self.session.uv.color[1],
             self.session.uv.color[2],
-            255,
+            self.session.uv.color[3],
         );
         if self.model.is_some() {
+            if !has_texture && !self.uv_faces.is_empty() {
+                let mut mesh = egui::Mesh::default();
+                for face in &self.uv_faces {
+                    let base = mesh.vertices.len() as u32;
+                    for i in 0..3 {
+                        mesh.colored_vertex(
+                            map(face.uv[i]),
+                            Color32::from_rgb(
+                                face.colors[i][0],
+                                face.colors[i][1],
+                                face.colors[i][2],
+                            ),
+                        );
+                    }
+                    mesh.add_triangle(base, base + 1, base + 2);
+                }
+                clipped.add(egui::Shape::mesh(mesh));
+            }
             for (a, b) in &self.uv_edges {
-                clipped.line_segment([map(*a), map(*b)], Stroke::new(1.2_f32, color));
+                let width =
+                    (self.session.uv.width * side / self.session.uv.size as f32).clamp(0.45, 4.);
+                clipped.line_segment([map(*a), map(*b)], Stroke::new(width, color));
             }
         } else {
             p.text(
@@ -887,6 +1057,9 @@ impl Workbench {
     }
 
     fn model_view(&mut self, ui: &mut egui::Ui, size: Vec2) {
+        if self.model.is_some() {
+            self.prepare_siren_scene();
+        }
         let (rect, response) = ui.allocate_exact_size(size, Sense::click_and_drag());
         let p = ui.painter_at(rect);
         p.rect_filled(rect, 0., VIEWPORT);
@@ -929,24 +1102,39 @@ impl Workbench {
             .groups
             .iter()
             .map(|g| {
-                let file = self.live.for_material(&g.material)?;
-                let image = file.image.clone()?;
-                Some(match textures.iter().position(|(p, ..)| *p == file.path) {
+                let (path, version, image) = if let Some(file) = self
+                    .live
+                    .for_material(&g.material)
+                    .filter(|f| f.image.is_some())
+                {
+                    (file.path.clone(), file.version, file.image.clone()?)
+                } else {
+                    (
+                        PathBuf::from(format!("@vehicle/{}", g.material)),
+                        self.scene_version,
+                        self.siren_embedded.get(&g.material)?.clone(),
+                    )
+                };
+                Some(match textures.iter().position(|(p, ..)| *p == path) {
                     Some(i) => i,
                     None => {
-                        textures.push((file.path.clone(), file.version, image));
+                        textures.push((path, version, image));
                         textures.len() - 1
                     }
                 })
             })
             .collect();
         let frame = viewer::Frame {
+            vehicle_opacity: 1.,
+            siren_surfaces: false,
+            night: false,
             mesh: scene,
             textures,
             bindings,
             camera: self.camera,
             wire: self.wire,
             paint: self.paint,
+            lights: vec![],
         };
         p.add(viewer::callback(&self.gpu, rect, frame));
         let mut y = rect.top() + 12.;
@@ -1009,50 +1197,6 @@ impl Workbench {
             .map(|i| patterns::decimal(channel.bits_at(i)).to_string())
             .collect();
         self.blink_brush = self.blink_brush.min(channel.color_count() - 1);
-    }
-    fn chevron(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal(|ui| {
-            if primary(ui, icon_text(icon::EXPORT, "Export PNG")).clicked() && self.job.is_none() {
-                let c = self.session.chevron.clone();
-                let model = self.model.clone();
-                let uv = self.session.uv.clone();
-                if let Some(path) = save_dialog("chevron.png", "png") {
-                    self.start_job(move || {
-                        std::fs::write(&path, c.png(model.as_ref(), &uv)?)
-                            .map_err(|e| e.to_string())?;
-                        Ok(JobResult::Saved(path.display().to_string()))
-                    });
-                }
-            }
-            if icon_button(ui, icon::SAVE, "Save Settings").clicked() {
-                match serde_json::to_vec_pretty(&self.session.chevron) {
-                    Ok(b) => self.save_bytes("chevron-project.json", "json", b),
-                    Err(e) => self.message(Err(e.to_string())),
-                }
-            }
-            if icon_button(ui, icon::IMPORT, "Import Settings").clicked()
-                && let Some(path) = rfd::FileDialog::new()
-                    .add_filter("Chevron JSON", &["json"])
-                    .pick_file()
-            {
-                let result = (|| {
-                    let bytes = duck_workshop::read_file(&path)?;
-                    let c: Chevron = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
-                    c.validate()?;
-                    self.session.chevron = c;
-                    self.chevron_dirty = true;
-                    Ok("Chevron settings imported.".into())
-                })();
-                self.message(result);
-            }
-        });
-        ui.separator();
-        let height = ui.available_height();
-        ui.horizontal_top(|ui|{let width=(ui.available_width()-275.).max(200.);ui.allocate_ui_with_layout(Vec2::new(width,height),egui::Layout::top_down(egui::Align::Min),|ui|{if self.chevron_dirty{match self.session.chevron.image(true,self.model.as_ref(),&self.session.uv){Ok(image)=>{let color=egui::ColorImage::from_rgba_unmultiplied([image.width()as usize,image.height()as usize],image.as_raw());self.chevron_texture=Some(ui.ctx().load_texture("chevron",color,egui::TextureOptions::LINEAR));self.chevron_dirty=false;},Err(e)=>{self.chevron_texture=None;self.message(Err(e));self.chevron_dirty=false;}}}let(rect,_)=ui.allocate_exact_size(Vec2::new(ui.available_width(),(ui.available_height()-50.).max(100.)),Sense::hover());checkerboard(ui.painter(),rect,24.);if let Some(texture)=&self.chevron_texture{let ratio=self.session.chevron.width as f32/self.session.chevron.height as f32;let w=rect.width().min(rect.height()*ratio)*0.92;let image_rect=Rect::from_center_size(rect.center(),Vec2::new(w,w/ratio));ui.painter().image(texture.id(),image_rect,Rect::from_min_max(Pos2::ZERO,Pos2::new(1.,1.)),Color32::WHITE);if self.reflective{for i in 0..10{let yy=image_rect.top()+image_rect.height()*i as f32/10.;ui.painter().line_segment([Pos2::new(image_rect.left(),yy),Pos2::new(image_rect.right(),yy+image_rect.height()*0.2)],Stroke::new(3.0_f32,Color32::from_white_alpha(50)));}}}ui.label(RichText::new("Reflective preview is display-only. PNG exports contain the flat pattern and transparency.").color(MUTED).small());});ui.separator();ui.allocate_ui_with_layout(Vec2::new(250.,height),egui::Layout::top_down(egui::Align::Min),|ui|{egui::ScrollArea::vertical().id_salt("chevron-settings").show(ui,|ui|{section(ui,"PATTERN");let before=serde_json::to_string(&self.session.chevron).unwrap();ui.horizontal(|ui|{if ui.button("Fire / EMS").clicked(){self.session.chevron.color_a=[255,210,0];self.session.chevron.color_b=[220,25,25];}
-if ui.button("DOT").clicked(){self.session.chevron.color_a=[255,135,0];self.session.chevron.color_b=[255,255,255];}});ui.horizontal(|ui|{ui.label("Color A");ui.color_edit_button_srgb(&mut self.session.chevron.color_a);ui.label("Color B");ui.color_edit_button_srgb(&mut self.session.chevron.color_b);});
-   for(label,val)in [("Width",&mut self.session.chevron.width),("Height",&mut self.session.chevron.height)]{ui.horizontal(|ui|{ui.label(label);ui.add(egui::DragValue::new(val).range(64..=8192).suffix(" px"));});}
-   ui.add(egui::Slider::new(&mut self.session.chevron.stripe,1.0..=500.0).text("Stripe width"));ui.add(egui::Slider::new(&mut self.session.chevron.angle,5.0..=85.0).text("Angle"));ui.add(egui::Slider::new(&mut self.session.chevron.center,0.0..=1.0).text("Center"));ui.add(egui::Slider::new(&mut self.session.chevron.offset,-1000.0..=1000.0).text("Offset"));ui.add(egui::Slider::new(&mut self.session.chevron.opacity,0..=255).text("Opacity"));
-   egui::ComboBox::from_label("Direction").selected_text(["Down chevron","Up chevron","Diagonal"][self.session.chevron.direction]).show_ui(ui,|ui|{for(i,label)in ["Down chevron","Up chevron","Diagonal"].iter().enumerate(){ui.selectable_value(&mut self.session.chevron.direction,i,*label);}});ui.checkbox(&mut self.reflective,"Reflective preview");ui.separator();ui.checkbox(&mut self.session.chevron.uv_clip,"Clip to current UV selection");ui.label(RichText::new("Import a model in UV Editor and select its meshes, LOD and UV channel. Those triangles become the export mask.").small().color(MUTED));if before!=serde_json::to_string(&self.session.chevron).unwrap(){self.chevron_dirty=true;ui.ctx().request_repaint();}});});});
     }
     fn refresh_meta(&mut self) {
         let text = &self.session.metas[self.meta_kind];
@@ -1121,8 +1265,13 @@ if ui.button("DOT").clicked(){self.session.chevron.color_a=[255,135,0];self.sess
                 let result = (|| {
                     let bytes = duck_workshop::read_file(&path)?;
                     let text = String::from_utf8(bytes).map_err(|e| e.to_string())?;
-                    meta::entries(&text, self.meta_kind)?;
-                    self.session.metas[self.meta_kind] = text;
+                    let kind = meta::detect_kind(&text)?;
+                    meta::entries(&text, kind)?;
+                    if kind != self.meta_kind {
+                        self.apply_meta()?;
+                    }
+                    self.session.metas[kind] = text;
+                    self.meta_kind = kind;
                     self.meta_index = 0;
                     self.refresh_meta();
                     Ok("Imported file. Unknown fields are retained.".into())
@@ -1418,6 +1567,8 @@ if ui.button("Export JSON").clicked()&&!self.diff_rows.is_empty(){self.save_byte
 impl eframe::App for Workbench {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.poll(ctx);
+        self.vehicle_resource_dialog(ctx);
+        self.advance_sirens(ctx);
         for message in self.live.poll(ctx) {
             self.message(message);
         }
@@ -1426,7 +1577,13 @@ impl eframe::App for Workbench {
         if let Some(path) = dropped.into_iter().find_map(|f| f.path)
             && self.job.is_none()
         {
-            if path.extension().is_some_and(|ext| ext == "duckworkshop") {
+            if path.is_dir() {
+                self.start_job(move || {
+                    Ok(JobResult::VehicleCatalog(
+                        duck_workshop::vehicle_resource::discover(&path)?,
+                    ))
+                });
+            } else if path.extension().is_some_and(|ext| ext == "duckworkshop") {
                 self.start_job(move || {
                     let project = Project::from_json(&duck_workshop::read_file(&path)?)?;
                     Ok(JobResult::Project(Box::new(project), path))
@@ -1445,6 +1602,10 @@ impl eframe::App for Workbench {
             }
         }
         self.chrome(ctx);
+        if self.tool == 1 && !self.siren_was_lightboard {
+            self.siren_popout = true;
+        }
+        self.siren_was_lightboard = self.tool == 1;
         egui::CentralPanel::default()
             .frame(egui::Frame::new().fill(BG).inner_margin(egui::Margin {
                 left: 14,
@@ -1468,9 +1629,13 @@ impl eframe::App for Workbench {
             });
         self.overlays(ctx);
         self.updates_ui(ctx);
+        self.siren_popout_ui(ctx);
     }
     fn on_exit(&mut self, gl: Option<&eframe::glow::Context>) {
         if let (Some(gl), Ok(mut gpu)) = (gl, self.gpu.lock()) {
+            gpu.destroy(gl);
+        }
+        if let (Some(gl), Ok(mut gpu)) = (gl, self.siren_gpu.lock()) {
             gpu.destroy(gl);
         }
     }

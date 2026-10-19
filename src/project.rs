@@ -8,6 +8,10 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Session {
+    #[serde(default = "whole_vehicle_default")]
+    pub uv_whole_vehicle: bool,
+    #[serde(default)]
+    pub siren_preview: crate::sirens::PreviewSettings,
     pub pattern: Pattern,
     pub chevron: Chevron,
     pub uv: UvOptions,
@@ -18,6 +22,8 @@ pub struct Session {
 impl Default for Session {
     fn default() -> Self {
         Self {
+            uv_whole_vehicle: true,
+            siren_preview: Default::default(),
             pattern: Pattern::default(),
             chevron: Chevron::default(),
             uv: UvOptions::default(),
@@ -27,8 +33,12 @@ impl Default for Session {
         }
     }
 }
+fn whole_vehicle_default() -> bool {
+    true
+}
 impl Session {
     pub fn validate(&self) -> Result<()> {
+        self.siren_preview.validate()?;
         self.pattern.validate()?;
         self.chevron.validate()?;
         if !(64..=8192).contains(&self.uv.size)
