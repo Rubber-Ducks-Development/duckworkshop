@@ -20,7 +20,7 @@ fn main() -> eframe::Result {
         ..Default::default()
     };
     eframe::run_native(
-        "Duck Workshop",
+        &format!("Duck Workshop {} Early Access", env!("CARGO_PKG_VERSION")),
         options,
         Box::new(|cc| Ok(Box::new(ui::Workbench::new(cc)))),
     )

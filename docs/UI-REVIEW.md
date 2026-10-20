@@ -1,5 +1,27 @@
 # Duck Studio alignment review and reference lock
 
+Version identification uses the existing native window titles. Add the actual
+compiled version and Early Access label to both windows; preserve project names,
+the existing interface and all controls. This addresses the user's screenshot of
+an older error while a backup-named executable still contained the first dev build.
+
+## Visible lens colors, October 20, local development
+
+Direct-build reference: Workshop's existing compact Lightboard Colors inspector,
+native egui checkboxes and Export menu. Preserve the charcoal palette, selected color
+chips, native focus states and inspector spacing. Refero craft-details contributes
+explicit state labels and nearby export guidance. Add **Recolor vehicle lens** below
+the color picker, with an explicit **Apply color to linked lenses** action and a named
+FiveM patch export. Shared UV conflicts appear as actionable errors. No new visual
+system or generated assets. Keep this work local, as requested.
+
+The eladderlt compatibility fix adds **Also recolor shared surfaces** beside the
+lens controls, using the same native checkbox style and a nearby amber explanation
+of its effect on static geometry. Default off; linked-siren color conflicts remain
+visible. Shared pixels are baked into the preview texture once per color/model
+change so the preview includes unassigned surfaces, with no double application of
+the selected hue. No new modal or visual system.
+
 ## Vertical Lightboard, October 20, 0.3.4
 
 Direct-build reference: the existing Workshop grid and the user's request to edit
@@ -77,3 +99,17 @@ No live Refero server was available.
 
 The MIT-licensed Studio setup was adapted with attribution in Installer/LICENSE.
 Workshop does not register Studio's file extensions or share Studio's install marker.
+
+
+## Independent lens development export (2026-10-20)
+
+Reference lock: existing Sequencer Export menu and compact native controls; retain
+Workshop colors, spacing, fonts and primary editing canvas. Refero craft-details
+forms/state guidance supplies explicit labels and visible export completion.
+Add one parallel export action named FiveM independent lens colors + model (.zip).
+Explain beside the existing lens control that YFT and YTD must be installed together.
+Reuse the existing asynchronous job and atomic save path. No new visual system.
+
+Validation: the running 0.3.6-dev.1 Early Access window, Lightboard and five-entry Export menu were inspected with Computer Use. The independent lens model option is readable and fits the existing compact charcoal menu. No layout drift was found. All 93 automated tests and strict Clippy checks passed. Native eladderlt and cambo1 base/high model exports passed triangle/UV/vertex, sampler/parameter, alpha, original-texture and source-file readback checks. FiveM runtime testing remains required.
+
+0.3.6-dev.2 validation: the crash ZIP was repacked from 134,217,728 to 99,352,576 graphics bytes. All 194 encoded pixel/mip allocations, dimensions, formats, YFT files and carcols metadata matched the prior ZIP exactly. Packed textures stay within a physical page and page-info counts match flags. Both ordinary and independent export enforce the 100,000,000-byte streaming segment limit. Fresh eladderlt and cambo1 native exports passed with matching base/high YFTs; eladderlt exercised the base/+hi mip fallback. Copy-on-write edits keep shared identical-color storage independently editable. GUI layout is unchanged from the prior visual inspection. FiveM runtime validation remains pending.

@@ -1,5 +1,80 @@
 # Changelog
 
+## Local development 0.3.6-dev.4 (Early Access)
+
+- Fix siren lenses scattering around some vehicles in the 3D preview. The carcols
+  delta now replaces a siren bone's authored rotation, as in game, instead of
+  adding to it, so lenses modeled on turned bones (angled corner and side lights)
+  are no longer turned twice. Unlit lenses keep their facing instead of snapping
+  back to the rest pose between flashes; only lit lenses scale up.
+
+- Fix lens exports being blocked by unused carcols slots. Preserve colors and
+  sequences for IDs with no model binding as metadata only, with an explicit
+  archive note and a Lightboard message. Real bone bindings still require
+  editable native lenses; no geometry or siren bindings are fabricated.
+- Check all base/high model variants before classifying an ID as unused.
+  Metadata-only exports do not rewrite YFTs or YTDs.
+
+
+## Local development 0.3.6-dev.3 (Early Access)
+
+- Give split lens geometries their own native vertex-buffer records and each cloned
+  material its own sampler records, including unchanged dirt/specular samplers.
+  Prevent aliases of records whose pointers are rewritten during native placement.
+- Check buffer and private-material sampler ownership before returning a model
+  export. Regression checks deliberately recreate both aliases and reject them.
+- Provide a source-based repair for earlier development YFTs that verifies all
+  preview geometry, UVs, vertex alpha, siren IDs and material names are unchanged.
+  Existing YTD colors and vehicle metadata are preserved. No backup or publication.
+
+## Local development 0.3.6-dev.2 (Early Access)
+
+- Fix the reported FiveM ERR_STR_FAILURE_3 crash. The previous writer rounded
+  the eladderlt graphics segment into a 134.22 MB streaming chunk. Both normal
+  lens export and independent model export now enforce the actual 100,000,000
+  byte limit for each streamed segment, in addition to per-page validation.
+- Compact native encoded texture allocations without changing their pixels,
+  mip chains, compression formats or alpha. Deduplicate identical storage and
+  use valid power-of-two page counts without splitting a texture across pages.
+- Detach shared pixel storage before recoloring one lens, retaining independent
+  editing when identical-color texture copies previously shared memory.
+- If private lens copies cannot fit in the base dictionary, retain full-resolution
+  copies in the matching +hi dictionary and use existing lower mips in the base.
+  Original textures remain at their original resolution. Both files are required.
+- Include a local atomic repair utility for old patch ZIPs. No vehicle source
+  files, server files, backups or GitHub state are changed by the repair.
+
+
+## Local development 0.3.6-dev.1 (Early Access)
+
+- Add FiveM independent lens colors + model export for legacy PC YFT vehicles.
+  Selected sirens get private materials and texture copies, allowing linked
+  lenses to use different colors without changing static or unselected surfaces.
+- Split triangle lists by siren binding while preserving original UVs, vertex
+  buffers, geometry, bones, physics and dirt/specular sampler references. Include
+  matching base/high model variants and YTD/+hi dictionaries in the ZIP patch.
+- Preserve original texture entries, native formats, mip counts and encoded alpha.
+  Append new resource data with bounded page metadata instead of rebuilding the
+  vehicle from its preview representation. Per-resource decompressed limit:256 MB.
+- Refuse triangles with conflicting selected siren bindings, changed source models,
+  existing private texture names and shared-surface recoloring in independent mode.
+- Keep this development copy local in DuckWorkshop-Dev.
+
+## Earlier local development - 0.3.5-dev.3 - Early Access
+
+- Show the running version and Early Access label in the main and siren-preview title bars so an older executable is immediately identifiable.
+
+- Fixed missing native YTD export sources on texture-heavy vehicles such as eladderlt. Source discovery now runs independently of the preview cache, and emergency lens images take priority over body textures within the existing preview limit.
+- Older development projects reconnect missing source names from their known vehicle dictionaries. Opening a project refreshes missing preview images without resetting the edited light pattern.
+- Expanded vehicle workspaces such as eladderlt use a dedicated bounded 512 MB project input limit. Individual model, texture and metadata imports retain their 100 MB file limit.
+- Added **Also recolor shared surfaces**, off by default. It permits recoloring UV pixels also used by static or unassigned geometry, shows the same baked pixels in the preview, and retains conflicts between differently colored sirens. Use **Apply color to linked lenses** to match their colors first.
+
+- Changing a Lightboard color also recolors its visible lens in the 3D siren preview, retaining texture brightness and transparency. Disable **Recolor vehicle lens** to use the authored texture color. Lens choices are included in Undo, pattern JSON and project saves.
+- Added **Export > FiveM lens colors + carcols (.zip)**. The patch includes updated native YTD dictionaries and carcols settings for the existing vehicle resource. Original files are unchanged. Legacy PC DXT1/DXT3/DXT5 and supported 32-bit textures retain their formats, mip chains, resource pointers and alpha data.
+- Shared texture pixels require matching colors. **Apply color to linked lenses** finds connected siren IDs; export reports conflicts with other lights or unassigned surfaces instead of silently recoloring them.
+- This development build stays local and has not been published to GitHub. Native cambo1 and eladderlt texture exports are checked by read-back; FiveM runtime verification remains required.
+- Project JSON now uses compact formatting. This keeps the tested cambo1 workspace within the 100 MB reopen limit without dropping geometry or embedded preview textures.
+
 ## 0.3.4 - Early Access - 2026-10-20
 
 - Turned the Lightboard sequence grid vertically: lights are columns across the top, and steps 01-32 run downward. The active step highlights a row.

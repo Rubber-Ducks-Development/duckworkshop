@@ -1,6 +1,21 @@
 use super::*;
 
 impl Workbench {
+    pub(super) fn read_project_file(path: &std::path::Path) -> Result<Project> {
+        let mut project = Project::load(path)?;
+        if let Some(model) = &mut project.model {
+            let paths: Vec<_> = model
+                .texture_sources
+                .values()
+                .cloned()
+                .collect::<std::collections::BTreeSet<_>>()
+                .into_iter()
+                .collect();
+            models::load_preview_textures(&paths, model);
+        }
+        project.validate()?;
+        Ok(project)
+    }
     pub(super) fn project(&mut self) -> Result<Project> {
         self.apply_meta()?;
         Ok(Project {
@@ -29,9 +44,8 @@ impl Workbench {
             .pick_file()
         {
             self.start_job(move || {
-                let bytes = duck_workshop::read_file(&path)?;
                 Ok(JobResult::Project(
-                    Box::new(Project::from_json(&bytes)?),
+                    Box::new(Self::read_project_file(&path)?),
                     path,
                 ))
             });
@@ -240,7 +254,10 @@ impl Workbench {
             .and_then(|p| p.file_stem())
             .map(|s| s.to_string_lossy().into_owned())
             .unwrap_or_else(|| "New project".into());
-        let title = format!("Duck Workshop - {name}");
+        let title = format!(
+            "Duck Workshop {} Early Access - {name}",
+            env!("CARGO_PKG_VERSION")
+        );
         if title != self.window_title {
             ctx.send_viewport_cmd(egui::ViewportCommand::Title(title.clone()));
             self.window_title = title;

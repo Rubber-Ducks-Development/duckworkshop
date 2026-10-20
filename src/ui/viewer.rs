@@ -224,6 +224,8 @@ pub(super) fn build_vehicle(
 
 /// What one frame draws. Textures are shared and uploaded only when their version changes.
 pub(super) struct Frame {
+    pub baked_lens_materials: std::collections::BTreeSet<String>,
+    pub lens_colors: std::collections::BTreeMap<u8, [u8; 3]>,
     pub vehicle_opacity: f32,
     pub mesh: Arc<SceneMesh>,
     pub textures: Vec<(PathBuf, u64, Arc<RgbaImage>)>,
@@ -233,13 +235,12 @@ pub(super) struct Frame {
     pub wire: bool,
     pub paint: [u8; 3],
     pub lights: Vec<PreviewLight>,
+    /// Preview-space pose of each siren's lens surfaces, lit or not.
+    pub siren_poses: Vec<(u8, Mat4)>,
     pub siren_surfaces: bool,
     pub night: bool,
 }
 pub(super) struct PreviewLight {
-    pub origin: Vec3,
-    pub scale: f32,
-    pub angle: f32,
     pub id: u8,
     pub position: Vec3,
     pub color: [u8; 3],
@@ -270,6 +271,8 @@ struct Resources {
     light_positions: Option<glow::UniformLocation>,
     light_colors: Option<glow::UniformLocation>,
     siren_colors: Option<glow::UniformLocation>,
+    siren_tints: Option<glow::UniformLocation>,
+    lens_baked: Option<glow::UniformLocation>,
     siren_transforms: Option<glow::UniformLocation>,
     siren_surfaces: Option<glow::UniformLocation>,
     night: Option<glow::UniformLocation>,
@@ -448,13 +451,19 @@ impl Gpu {
     }
 }
 
-/// Carcols delta turns a lens around its siren pivot, including flashing lights.
-/// The viewer converts GTA's Z-up space to Y-up before applying this transform.
-fn siren_transform(origin: Vec3, scale: f32, angle: f32) -> Mat4 {
-    Mat4::from_translation(origin)
-        * Mat4::from_rotation_y(angle)
-        * Mat4::from_scale(Vec3::splat(scale))
-        * Mat4::from_translation(-origin)
+/// Expresses a model-space siren lens pose in the viewer's space. GTA's Z-up
+/// models are turned Y-up, so the same change of basis wraps the pose.
+pub(super) fn convert_pose(pose: Mat4, z_up: bool) -> Mat4 {
+    if !z_up {
+        return pose;
+    }
+    let basis = Mat4::from_cols(
+        glam::Vec4::new(-1., 0., 0., 0.),
+        glam::Vec4::new(0., 0., 1., 0.),
+        glam::Vec4::new(0., 1., 0., 0.),
+        glam::Vec4::W,
+    );
+    basis * pose * basis.inverse()
 }
 
 const VERTEX: &str = r#"
@@ -502,6 +511,8 @@ uniform int u_light_count;
 uniform vec4 u_light_positions[32];
 uniform vec4 u_light_colors[32];
 uniform vec4 u_siren_colors[32];
+uniform vec4 u_siren_tints[32];
+uniform int u_lens_baked;
 uniform int u_siren_surfaces;
 uniform int u_night;
 uniform int u_glass;
@@ -538,7 +549,13 @@ void main() {
     if (lens) {
         vec4 lamp = vec4(0.0);
         for (int i=0; i<32; i++) {
-            if (abs(v_siren-float(i+1))<0.25) { lamp=u_siren_colors[i]; }
+            if (abs(v_siren-float(i+1))<0.25) {
+                lamp=u_siren_colors[i];
+                if (u_siren_tints[i].a>0.5 && u_lens_baked==0) {
+                    texel.rgb=u_siren_tints[i].rgb*max(texel.r,max(texel.g,texel.b));
+                    base=texel.rgb;
+                }
+            }
         }
         emission = (u_mode == 1 ? texel.rgb : lamp.rgb) * lamp.a;
         shaded = base * 0.08 + emission * 1.5;
@@ -638,6 +655,8 @@ impl Resources {
                 light_positions: gl.get_uniform_location(program, "u_light_positions[0]"),
                 light_colors: gl.get_uniform_location(program, "u_light_colors[0]"),
                 siren_colors: gl.get_uniform_location(program, "u_siren_colors[0]"),
+                siren_tints: gl.get_uniform_location(program, "u_siren_tints[0]"),
+                lens_baked: gl.get_uniform_location(program, "u_lens_baked"),
                 siren_transforms: gl.get_uniform_location(program, "u_siren_transforms[0]"),
                 siren_surfaces: gl.get_uniform_location(program, "u_siren_surfaces"),
                 night: gl.get_uniform_location(program, "u_night"),
@@ -756,15 +775,16 @@ impl Resources {
             for matrix in transforms.as_chunks_mut::<12>().0 {
                 matrix.copy_from_slice(&Mat4::IDENTITY.to_cols_array()[..12]);
             }
+            for (id, pose) in &frame.siren_poses {
+                if (1..=32).contains(id) {
+                    let offset = (*id as usize - 1) * 12;
+                    transforms[offset..offset + 12]
+                        .copy_from_slice(&pose.transpose().to_cols_array()[..12]);
+                }
+            }
             for lamp in &frame.lights {
                 if (1..=32).contains(&lamp.id) {
                     let o = (lamp.id as usize - 1) * 4;
-                    let offset = (lamp.id as usize - 1) * 12;
-                    transforms[offset..offset + 12].copy_from_slice(
-                        &siren_transform(lamp.origin, lamp.scale, lamp.angle)
-                            .transpose()
-                            .to_cols_array()[..12],
-                    );
                     palette[o..o + 4].copy_from_slice(&[
                         lamp.color[0] as f32 / 255.,
                         lamp.color[1] as f32 / 255.,
@@ -774,6 +794,19 @@ impl Resources {
                 }
             }
             gl.uniform_4_f32_slice(self.siren_colors.as_ref(), &palette);
+            let mut tints = [0f32; 128];
+            for (&id, color) in &frame.lens_colors {
+                if (1..=32).contains(&id) {
+                    let o = (id as usize - 1) * 4;
+                    tints[o..o + 4].copy_from_slice(&[
+                        color[0] as f32 / 255.,
+                        color[1] as f32 / 255.,
+                        color[2] as f32 / 255.,
+                        1.,
+                    ]);
+                }
+            }
+            gl.uniform_4_f32_slice(self.siren_tints.as_ref(), &tints);
             gl.uniform_4_f32_slice(self.siren_transforms.as_ref(), &transforms);
             let count = frame.lights.len().min(32);
             gl.uniform_1_i32(self.light_count.as_ref(), count as i32);
@@ -841,6 +874,10 @@ impl Resources {
                     }
                     gl.depth_mask(!mask && pass != 2);
                     gl.uniform_1_i32(self.glass.as_ref(), i32::from(group.glass));
+                    gl.uniform_1_i32(
+                        self.lens_baked.as_ref(),
+                        i32::from(frame.baked_lens_materials.contains(&group.material)),
+                    );
                     gl.uniform_1_i32(self.cutout.as_ref(), i32::from(group.cutout));
                     gl.uniform_1_i32(self.alpha.as_ref(), i32::from(group.alpha));
                     gl.uniform_1_i32(self.vertex_alpha.as_ref(), i32::from(group.vertex_alpha));
@@ -939,8 +976,10 @@ mod tests {
 
     #[test]
     fn carcols_facing_rotates_scaled_lenses_about_their_vehicle_pivots() {
+        use duck_workshop::sirens::SirenAnchor;
         use std::f32::consts::{FRAC_PI_2, PI};
-        let pivot = convert_position([-0.72, -0.37, -0.305], true);
+        let anchor = SirenAnchor::new(1, [-0.72, -0.37, -0.305]);
+        let pivot = convert_position(anchor.position, true);
         let lens = convert_position([-0.74, -0.367, -0.30], true);
         for (angle, expected) in [
             (0., [-2.72, -0.07, 0.195]),
@@ -948,7 +987,7 @@ mod tests {
             (-FRAC_PI_2, [-0.42, 1.63, 0.195]),
             (PI, [1.28, -0.67, 0.195]),
         ] {
-            let matrix = siren_transform(pivot, 100., angle);
+            let matrix = convert_pose(anchor.lens_transform(100., angle), true);
             assert!(matrix.transform_point3(pivot).abs_diff_eq(pivot, 0.0001));
             assert!(
                 matrix
@@ -965,7 +1004,31 @@ mod tests {
             );
             assert!(uploaded.abs_diff_eq(matrix.transform_point3(lens), 0.0001));
         }
-        assert!(siren_transform(pivot, 1., 0.).abs_diff_eq(Mat4::IDENTITY, 0.0001));
+        assert!(
+            convert_pose(anchor.lens_transform(1., 0.), true).abs_diff_eq(Mat4::IDENTITY, 0.0001)
+        );
+    }
+
+    #[test]
+    fn lenses_on_turned_siren_bones_are_not_turned_twice() {
+        use duck_workshop::sirens::SirenAnchor;
+        use std::f32::consts::FRAC_PI_4;
+        // A corner lens modeled at 45 degrees on a bone turned to match its carcols delta.
+        let mut anchor = SirenAnchor::new(3, [0.8, 1.9, 1.4]);
+        anchor.rest_rotation = glam::Quat::from_rotation_z(FRAC_PI_4).to_array();
+        let lens = [0.75, 1.95, 1.42];
+        let pose = convert_pose(anchor.lens_transform(1., FRAC_PI_4), true);
+        let seen = convert_position(lens, true);
+        assert!(
+            pose.transform_point3(seen).abs_diff_eq(seen, 0.0001),
+            "a matching delta keeps the modeled lens in place"
+        );
+        // Lit lenses grow about the pivot without turning away from the vehicle.
+        let lit = convert_pose(anchor.lens_transform(10., FRAC_PI_4), true);
+        let pivot = convert_position(anchor.position, true);
+        assert!(
+            (lit.transform_point3(seen) - pivot).abs_diff_eq((seen - pivot) * 10., 0.0001)
+        );
     }
 
     #[test]

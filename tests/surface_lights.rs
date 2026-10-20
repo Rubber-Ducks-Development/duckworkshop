@@ -65,10 +65,7 @@ fn real_lenses_do_not_use_export_defaults_when_vehicle_settings_are_missing() {
         models::parse_obj("v 0 0 0\nv 1 0 0\nv 0 1 0\nvt 0 0\nvt 1 0\nvt 0 1\nf 1/1 2/2 3/3")
             .unwrap();
     model.meshes[0].siren_ids = vec![1; 3];
-    model.sirens.push(sirens::SirenAnchor {
-        id: 1,
-        position: [0.; 3],
-    });
+    model.sirens.push(sirens::SirenAnchor::new(1, [0.; 3]));
     let mut pattern = Pattern::default();
     assert!(sirens::missing_surface_scales(&model, &pattern));
     assert_eq!(
@@ -112,14 +109,8 @@ fn imported_vehicles_hide_missing_siren_slots_but_keep_schematic_and_manual_posi
     };
     let model = Model {
         sirens: vec![
-            SirenAnchor {
-                id: 1,
-                position: [1., 2., 3.],
-            },
-            SirenAnchor {
-                id: 20,
-                position: [4., 5., 6.],
-            },
+            SirenAnchor::new(1, [1., 2., 3.]),
+            SirenAnchor::new(20, [4., 5., 6.]),
         ],
         ..Default::default()
     };

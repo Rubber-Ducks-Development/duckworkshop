@@ -79,6 +79,9 @@ pub struct Workbench {
     siren_camera: viewer::Camera,
     siren_scene: Option<std::sync::Arc<viewer::SceneMesh>>,
     siren_embedded: std::collections::BTreeMap<String, std::sync::Arc<image::RgbaImage>>,
+    siren_recolored: std::collections::BTreeMap<String, std::sync::Arc<image::RgbaImage>>,
+    siren_recolor_key: Option<u64>,
+    siren_recolor_error: Option<String>,
     siren_version: u64,
     siren_gpu: viewer::SharedGpu,
     siren_popout: bool,
@@ -181,6 +184,9 @@ impl Workbench {
             siren_camera: Self::siren_fit_camera(),
             siren_scene: None,
             siren_embedded: Default::default(),
+            siren_recolored: Default::default(),
+            siren_recolor_key: None,
+            siren_recolor_error: None,
             siren_version: u64::MAX,
             siren_gpu: Default::default(),
             siren_popout: false,
@@ -1141,6 +1147,8 @@ impl Workbench {
             })
             .collect();
         let frame = viewer::Frame {
+            baked_lens_materials: Default::default(),
+            lens_colors: Default::default(),
             vehicle_opacity: 1.,
             siren_surfaces: false,
             night: false,
@@ -1151,6 +1159,7 @@ impl Workbench {
             wire: self.wire,
             paint: self.paint,
             lights: vec![],
+            siren_poses: vec![],
         };
         p.add(viewer::callback(&self.gpu, rect, frame));
         let mut y = rect.top() + 12.;
@@ -1601,7 +1610,7 @@ impl eframe::App for Workbench {
                 });
             } else if path.extension().is_some_and(|ext| ext == "duckworkshop") {
                 self.start_job(move || {
-                    let project = Project::from_json(&duck_workshop::read_file(&path)?)?;
+                    let project = Self::read_project_file(&path)?;
                     Ok(JobResult::Project(Box::new(project), path))
                 });
             } else if path

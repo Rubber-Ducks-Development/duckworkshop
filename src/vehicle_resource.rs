@@ -247,6 +247,7 @@ pub fn import(vehicle: &Vehicle, high: bool) -> Result<Imported> {
     // Load geometry first, then prefer explicitly linked texture dictionaries.
     let bytes = crate::read_file(chosen)?;
     let mut model = models::parse_rsc7(&bytes, "yft")?;
+    model.native_source = Some(chosen.to_owned());
     model.name = chosen
         .file_name()
         .unwrap_or_default()

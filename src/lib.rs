@@ -1,4 +1,5 @@
 pub mod diff;
+pub mod lens_colors;
 pub mod meta;
 pub mod models;
 pub mod patterns;

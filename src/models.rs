@@ -1,8 +1,10 @@
 use crate::{Result, xml_document};
 use serde::{Deserialize, Serialize};
 use std::{io::Read, path::Path};
+pub mod lens_model;
+pub(crate) mod native_edit;
 mod placement;
-mod texture_dict;
+pub(crate) mod texture_dict;
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct Mesh {
@@ -20,6 +22,10 @@ pub struct Mesh {
 }
 #[derive(Clone, Default, Serialize, Deserialize, Debug)]
 pub struct Model {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub native_source: Option<std::path::PathBuf>,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub texture_sources: std::collections::BTreeMap<String, std::path::PathBuf>,
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub preview_textures: std::collections::BTreeMap<String, String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -190,6 +196,7 @@ pub fn load(path: &Path) -> Result<Model> {
     model.validate()?;
     model.name = filename;
     if ext == "yft" || ext == "ydr" {
+        model.native_source = Some(path.to_owned());
         texture_dict::load_nearby(path, &mut model);
     }
     model.validate()?;
@@ -797,6 +804,13 @@ impl Reader {
 // Original read-only implementation of the documented legacy PC RSC7 layouts.
 // Format research: CodeWalker Drawable.cs, Frag.cs and RpfResourcePageFlags.
 pub fn parse_rsc7(bytes: &[u8], ext: &str) -> Result<Model> {
+    parse_rsc7_traced(bytes, ext, None)
+}
+fn parse_rsc7_traced(
+    bytes: &[u8],
+    ext: &str,
+    mut trace: Option<&mut Vec<lens_model::NativeMesh>>,
+) -> Result<Model> {
     if bytes.len() < 16 || &bytes[0..4] != b"RSC7" {
         return Err("Expected a standalone RSC7 model. Export from the RPF archive first.".into());
     }
@@ -1058,6 +1072,20 @@ pub fn parse_rsc7(bytes: &[u8], ext: &str) -> Result<Model> {
                     }
                     for i in 0..ic {
                         m.indices.push(r.u16(idata + i * 2)? as u32)
+                    }
+                    if let Some(trace) = trace.as_mut() {
+                        let material_drawable = if r.materials(*d)?.is_empty() {
+                            root
+                        } else {
+                            *d
+                        };
+                        trace.push(lens_model::NativeMesh {
+                            model,
+                            geometry: g,
+                            slot: gi,
+                            shader: shader as usize,
+                            group: r.req(material_drawable + 0x10)?,
+                        });
                     }
                     out.meshes.push(m);
                     if out.triangles() > 2_000_000 {

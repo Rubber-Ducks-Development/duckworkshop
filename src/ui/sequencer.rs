@@ -89,6 +89,46 @@ impl Workbench {
                     .join("\n");
                 self.save_bytes("sequencers.txt", "txt", text.into_bytes());
             }
+            3 | 4 => {
+                if kind == 4 && self.session.pattern.recolor_shared_surfaces {
+                    self.message(Err(
+                        "Turn off Also recolor shared surfaces to export independent lens colors."
+                            .into(),
+                    ));
+                    return;
+                }
+                let Some(model) = self.model.clone() else {
+                    self.message(Err(
+                        "Import a native vehicle folder before exporting lens colors".into(),
+                    ));
+                    return;
+                };
+                let Some(path) = rfd::FileDialog::new()
+                    .set_file_name(if kind == 4 {
+                        "vehicle-independent-lenses.zip"
+                    } else {
+                        "vehicle-lens-colors.zip"
+                    })
+                    .add_filter("FiveM lens color patch", &["zip"])
+                    .save_file()
+                else {
+                    return;
+                };
+                let pattern = self.session.pattern.clone();
+                self.start_job(move || {
+                    let bytes = if kind == 4 {
+                        duck_workshop::models::lens_model::export(&model, &pattern)?
+                    } else {
+                        duck_workshop::lens_colors::export(&model, &pattern)?
+                    };
+                    let parent = path.parent().ok_or("Invalid output folder")?;
+                    let mut file =
+                        tempfile::NamedTempFile::new_in(parent).map_err(|e| e.to_string())?;
+                    file.write_all(&bytes).map_err(|e| e.to_string())?;
+                    file.persist(&path).map_err(|e| e.to_string())?;
+                    Ok(JobResult::Saved(path.display().to_string()))
+                });
+            }
             _ => match serde_json::to_vec_pretty(&self.session.pattern) {
                 Ok(bytes) => self.save_bytes("light-pattern.json", "json", bytes),
                 Err(e) => self.message(Err(e.to_string())),
@@ -143,6 +183,8 @@ impl Workbench {
                     "carcols.meta",
                     "Binary + Decimal Sequencers",
                     "Pattern JSON",
+                    "FiveM lens colors + carcols (.zip)",
+                    "FiveM independent lens colors + model (.zip)",
                 ]
                 .iter()
                 .enumerate()
@@ -590,6 +632,60 @@ impl Workbench {
                 changed = true;
             }
         });
+        let mut recolor = self.session.pattern.channels[selected].recolor_at(self.blink_brush);
+        if ui.checkbox(&mut recolor, "Recolor vehicle lens").on_hover_text("Changes the visible lens hue while retaining texture detail and transparency. Export FiveM lens colors + carcols to apply it in game.").changed() {
+            self.session.pattern.channels[selected].set_recolor(self.blink_brush, recolor);
+            changed = true;
+        }
+        if let Some(model) = &self.model {
+            let id = (self.session.pattern.channels[..selected]
+                .iter()
+                .map(|c| c.color_count())
+                .sum::<usize>()
+                + self.blink_brush
+                + 1) as u8;
+            if !duck_workshop::lens_colors::has_siren_binding(model, id) {
+                ui.label(RichText::new(format!("Siren {id} has no model binding. Its color and sequence export to carcols only; add a siren bone and lens geometry to make it visible.")).small().color(ACCENT));
+            }
+        }
+        if recolor {
+            changed |= ui.checkbox(&mut self.session.pattern.recolor_shared_surfaces, "Also recolor shared surfaces")
+                .on_hover_text("Allows these texture pixels to change on static or unassigned surfaces too, in preview and FiveM. Linked sirens still need matching colors.").changed();
+            if self.session.pattern.recolor_shared_surfaces {
+                ui.label(
+                    RichText::new("Static surfaces sharing these pixels will change too.")
+                        .small()
+                        .color(ACCENT),
+                );
+            }
+            ui.label(
+                RichText::new("For different colors on linked lenses, turn off shared-surface recoloring and export Independent lens colors + model. Install its YFT and YTD files together.")
+                    .small()
+                    .color(DIM_TEXT),
+            );
+            if ui.small_button("Apply color to linked lenses").on_hover_text("Find lights that share texture pixels and give them this color. Shared pixels cannot hold separate colors.").clicked() {
+                let id = (self.session.pattern.channels[..selected].iter().map(|c| c.color_count()).sum::<usize>() + self.blink_brush + 1) as u8;
+                let result = self.model.as_ref().ok_or_else(|| "Import a native vehicle first".to_string()).and_then(|m| duck_workshop::lens_colors::linked(m, id));
+                match result {
+                    Ok(ids) if ids.iter().any(|id| *id as usize > self.session.pattern.siren_count()) => {
+                        self.message(Err(format!("Linked lenses {ids:?} include sirens missing from this pattern. Import the matching vehicle settings first.")));
+                    }
+                    Ok(ids) => {
+                        let color = self.session.pattern.channels[selected].color_at(self.blink_brush);
+                        let mut next = 1u8;
+                        for channel in &mut self.session.pattern.channels {
+                            for layer in 0..channel.color_count() {
+                                if ids.contains(&next) { channel.set_color(layer, color); }
+                                next += 1;
+                            }
+                        }
+                        changed = true;
+                        self.message(Ok(format!("Lens color applied to sirens {ids:?}")));
+                    }
+                    Err(error) => self.message(Err(error)),
+                }
+            }
+        }
         if count > 1 {
             let first = self.session.pattern.channels[..selected]
                 .iter()

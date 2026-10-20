@@ -9,6 +9,9 @@ pub const MAX_SIRENS: usize = 32;
 /// A step shows at most one color.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Channel {
+    /// Bake this color into native lens textures as well as carcols.
+    #[serde(default)]
+    pub recolor_lens: bool,
     pub name: String,
     pub color: [u8; 3],
     pub bits: [bool; 32],
@@ -19,12 +22,15 @@ pub struct Channel {
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ColorLayer {
+    #[serde(default)]
+    pub recolor_lens: bool,
     pub color: [u8; 3],
     pub bits: [bool; 32],
 }
 impl Channel {
     pub fn new(name: String, color: [u8; 3]) -> Self {
         Self {
+            recolor_lens: false,
             name,
             color,
             bits: [false; 32],
@@ -44,10 +50,25 @@ impl Channel {
         }
     }
     pub fn set_color(&mut self, index: usize, color: [u8; 3]) {
+        self.set_recolor(index, true);
         if index == 0 {
             self.color = color
         } else {
             self.extra[index - 1].color = color
+        }
+    }
+    pub fn recolor_at(&self, index: usize) -> bool {
+        if index == 0 {
+            self.recolor_lens
+        } else {
+            self.extra[index - 1].recolor_lens
+        }
+    }
+    pub fn set_recolor(&mut self, index: usize, enabled: bool) {
+        if index == 0 {
+            self.recolor_lens = enabled;
+        } else {
+            self.extra[index - 1].recolor_lens = enabled;
         }
     }
     pub fn bits_at(&self, index: usize) -> &[bool; 32] {
@@ -102,6 +123,7 @@ impl Channel {
             return false;
         }
         self.extra.push(ColorLayer {
+            recolor_lens: true,
             color,
             bits: [false; 32],
         });
@@ -115,6 +137,7 @@ impl Channel {
         if index == 0 {
             let next = self.extra.remove(0);
             self.color = next.color;
+            self.recolor_lens = next.recolor_lens;
             self.bits = next.bits;
         } else {
             self.extra.remove(index - 1);
@@ -124,6 +147,7 @@ impl Channel {
     pub fn sirens(&self) -> Vec<Channel> {
         (0..self.color_count())
             .map(|i| Channel {
+                recolor_lens: self.recolor_at(i),
                 name: if self.extra.is_empty() {
                     self.name.clone()
                 } else {
@@ -140,6 +164,8 @@ impl Channel {
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Pattern {
+    #[serde(default)]
+    pub recolor_shared_surfaces: bool,
     pub version: u32,
     pub name: String,
     pub id: u32,
@@ -151,6 +177,7 @@ pub struct Pattern {
 impl Default for Pattern {
     fn default() -> Self {
         Self {
+            recolor_shared_surfaces: false,
             version: 1,
             name: "Untitled Sequence".into(),
             id: 1,
@@ -223,11 +250,15 @@ impl Pattern {
         for i in 0..source.color_count() {
             let color = source.color_at(i);
             match (0..target.color_count()).find(|&k| target.color_at(k) == color) {
-                Some(k) => map.push(k),
+                Some(k) => {
+                    target.set_recolor(k, target.recolor_at(k) || source.recolor_at(i));
+                    map.push(k);
+                }
                 None => {
                     if !target.add_color(color) {
                         return Err(format!("A light can have up to {MAX_COLORS} colors."));
                     }
+                    target.set_recolor(target.color_count() - 1, source.recolor_at(i));
                     map.push(target.color_count() - 1);
                 }
             }
@@ -302,6 +333,7 @@ impl Pattern {
                 .parse::<u32>()
                 .map_err(|_| "Invalid unsigned sequencer")?;
             channels.push(Channel {
+                recolor_lens: false,
                 bits: bits(sequence),
                 intensity: val(n, "intensity").parse().unwrap_or(1.),
                 delta: val(flash, "delta").parse().unwrap_or(0.),
@@ -312,6 +344,7 @@ impl Pattern {
             });
         }
         let p = Self {
+            recolor_shared_surfaces: false,
             version: 1,
             name: val(item, "name"),
             id: val(item, "id")

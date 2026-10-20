@@ -11,6 +11,57 @@ use std::collections::BTreeMap;
 pub struct SirenAnchor {
     pub id: u8,
     pub position: [f32; 3],
+    /// The bone's authored rotation relative to its parent. The game replaces it
+    /// with the carcols facing angle, so lenses authored on a turned axis keep
+    /// their modeled place instead of being turned twice.
+    #[serde(default = "identity_rotation")]
+    pub rest_rotation: [f32; 4],
+    /// World rotation of the bone's parent, the frame the facing angle turns in.
+    #[serde(default = "identity_rotation")]
+    pub parent_rotation: [f32; 4],
+}
+fn identity_rotation() -> [f32; 4] {
+    Quat::IDENTITY.to_array()
+}
+impl SirenAnchor {
+    pub fn new(id: u8, position: [f32; 3]) -> Self {
+        Self {
+            id,
+            position,
+            rest_rotation: identity_rotation(),
+            parent_rotation: identity_rotation(),
+        }
+    }
+    /// Model-space pose of this siren's lens surfaces, as the game poses the bone:
+    /// carcols delta replaces the authored bone rotation (around the parent's Z axis)
+    /// and a lit siren scales by its scale factor about the bone pivot.
+    pub fn lens_transform(&self, scale: f32, angle: f32) -> Mat4 {
+        lens_transform(
+            Vec3::from(self.position),
+            quat(self.parent_rotation),
+            quat(self.rest_rotation),
+            scale,
+            angle,
+        )
+    }
+}
+fn quat(q: [f32; 4]) -> Quat {
+    let q = Quat::from_array(q);
+    if q.is_finite() && q.length_squared() > 1e-8 {
+        q.normalize()
+    } else {
+        Quat::IDENTITY
+    }
+}
+/// Lens pose about `pivot`. With identity rotations this is a plain turn by `angle`.
+pub fn lens_transform(pivot: Vec3, parent: Quat, rest: Quat, scale: f32, angle: f32) -> Mat4 {
+    let posed = parent * Quat::from_rotation_z(angle);
+    let authored = parent * rest;
+    Mat4::from_translation(pivot)
+        * Mat4::from_quat(posed)
+        * Mat4::from_scale(Vec3::splat(scale))
+        * Mat4::from_quat(authored.inverse())
+        * Mat4::from_translation(-pivot)
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -129,9 +180,18 @@ pub(crate) fn bone_anchors(bones: &[BonePose]) -> Result<Vec<SirenAnchor>> {
                 .strip_prefix("siren")?
                 .parse::<u8>()
                 .ok()?;
+            let rotation = |m: &Mat4| m.to_scale_rotation_translation().1;
+            let parent = usize::try_from(b.parent)
+                .ok()
+                .and_then(|p| worlds.get(p))
+                .map_or(Quat::IDENTITY, rotation);
             (1..=32).contains(&id).then(|| SirenAnchor {
                 id,
                 position: worlds[i].transform_point3(Vec3::ZERO).to_array(),
+                rest_rotation: (parent.inverse() * rotation(&worlds[i]))
+                    .normalize()
+                    .to_array(),
+                parent_rotation: parent.normalize().to_array(),
             })
         })
         .collect();
@@ -330,6 +390,12 @@ mod tests {
         let anchors = bone_anchors(&bones).unwrap();
         assert_eq!(anchors[0].id, 32);
         assert!((Vec3::from(anchors[0].position) - Vec3::new(1., 3., 3.)).length() < 0.0001);
+        // The authored turn is kept relative to the parent the facing angle replaces.
+        assert!(Quat::from_array(anchors[0].rest_rotation).abs_diff_eq(Quat::IDENTITY, 0.0001));
+        assert!(
+            Quat::from_array(anchors[0].parent_rotation)
+                .abs_diff_eq(Quat::from_rotation_z(std::f32::consts::FRAC_PI_2), 0.0001)
+        );
         let mut bad = bones;
         bad[0].parent = 1;
         assert!(bone_anchors(&bad).is_err());
@@ -347,10 +413,7 @@ mod tests {
         assert!(!m[0].active);
         assert_eq!(m[0].position, m[1].position);
         let model = Model {
-            sirens: vec![SirenAnchor {
-                id: 2,
-                position: [1., 2., 3.],
-            }],
+            sirens: vec![SirenAnchor::new(2, [1., 2., 3.])],
             ..schematic_model()
         };
         let mut settings = PreviewSettings::default();

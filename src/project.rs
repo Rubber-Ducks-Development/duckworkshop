@@ -5,6 +5,9 @@ use crate::{
     render::{Chevron, UvOptions},
 };
 use serde::{Deserialize, Serialize};
+use std::io::Read;
+
+const MAX_PROJECT_BYTES: usize = 512 * 1024 * 1024;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Session {
@@ -72,6 +75,22 @@ pub struct Project {
     pub textures: Vec<(String, std::path::PathBuf)>,
 }
 impl Project {
+    /// Projects include expanded geometry and image data, so their bounded
+    /// input allowance is larger than the limit for a single vehicle file.
+    pub fn load(path: &std::path::Path) -> Result<Self> {
+        let file = std::fs::File::open(path).map_err(|e| e.to_string())?;
+        if file.metadata().map_err(|e| e.to_string())?.len() > MAX_PROJECT_BYTES as u64 {
+            return Err("Project exceeds the 512 MB workspace limit".into());
+        }
+        let mut bytes = Vec::new();
+        file.take((MAX_PROJECT_BYTES + 1) as u64)
+            .read_to_end(&mut bytes)
+            .map_err(|e| e.to_string())?;
+        if bytes.len() > MAX_PROJECT_BYTES {
+            return Err("Project exceeds the 512 MB workspace limit".into());
+        }
+        Self::from_json(&bytes)
+    }
     pub fn validate(&self) -> Result<()> {
         if self.format != "duck-workshop" || self.version != 1 || self.tool >= 5 {
             return Err("This file is not a supported Duck Workshop project.".into());
@@ -90,6 +109,11 @@ impl Project {
     }
     pub fn to_json(&self) -> Result<Vec<u8>> {
         self.validate()?;
-        serde_json::to_vec_pretty(self).map_err(|e| e.to_string())
+        // Native geometry is large; keep formatting overhead out of saved workspaces.
+        let bytes = serde_json::to_vec(self).map_err(|e| e.to_string())?;
+        if bytes.len() > MAX_PROJECT_BYTES {
+            return Err("Project exceeds the 512 MB workspace limit".into());
+        }
+        Ok(bytes)
     }
 }

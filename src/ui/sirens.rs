@@ -170,6 +170,57 @@ impl Workbench {
             }
         }
     }
+    fn prepare_siren_recolors(&mut self) {
+        use std::hash::{Hash, Hasher};
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        (
+            self.scene_version,
+            self.session.pattern.recolor_shared_surfaces,
+            duck_workshop::lens_colors::colors(&self.session.pattern),
+        )
+            .hash(&mut hasher);
+        let key = hasher.finish();
+        if self.siren_recolor_key == Some(key) {
+            return;
+        }
+        self.siren_recolor_key = Some(key);
+        self.siren_recolored.clear();
+        self.siren_recolor_error = None;
+        if !self.session.pattern.recolor_shared_surfaces {
+            return;
+        }
+        let Some(model) = &self.model else { return };
+        let mut by_texture = std::collections::BTreeMap::new();
+        for (name, image) in &self.siren_embedded {
+            let Some(material) = model.material_info.get(name) else {
+                continue;
+            };
+            let texture = if material.is_livery() {
+                &material.secondary_texture
+            } else {
+                &material.diffuse_texture
+            }
+            .to_ascii_lowercase();
+            if !by_texture.contains_key(&texture) {
+                let image = match duck_workshop::lens_colors::shared_preview(
+                    model,
+                    &texture,
+                    image,
+                    &self.session.pattern,
+                ) {
+                    Ok(image) => image.map(std::sync::Arc::new),
+                    Err(error) => {
+                        self.siren_recolor_error = Some(error);
+                        None
+                    }
+                };
+                by_texture.insert(texture.clone(), image);
+            }
+            if let Some(Some(image)) = by_texture.get(&texture) {
+                self.siren_recolored.insert(name.clone(), image.clone());
+            }
+        }
+    }
     fn siren_preview_content(&mut self, ui: &mut egui::Ui, height: f32) {
         ui.horizontal_wrapped(|ui| {
             if ui
@@ -303,6 +354,10 @@ impl Workbench {
         }
     }
     fn siren_view(&mut self, ui: &mut egui::Ui, size: Vec2, markers: &[sirens::Marker]) {
+        self.prepare_siren_recolors();
+        if let Some(error) = &self.siren_recolor_error {
+            ui.label(RichText::new(error).small().color(ACCENT));
+        }
         let (rect, response) = ui.allocate_exact_size(size, Sense::click_and_drag());
         let p = ui.painter_at(rect);
         p.rect_filled(rect, 3., VIEWPORT);
@@ -372,6 +427,7 @@ impl Workbench {
             }
         }
         let mut textures = vec![];
+        let mut baked_lens_materials = std::collections::BTreeSet::new();
         let bindings = scene
             .groups
             .iter()
@@ -382,6 +438,13 @@ impl Workbench {
                     .filter(|f| f.image.is_some())
                 {
                     (file.path.clone(), file.version, file.image.clone()?)
+                } else if let Some(image) = self.siren_recolored.get(&group.material) {
+                    baked_lens_materials.insert(group.material.clone());
+                    (
+                        PathBuf::from(format!("@recolored/{}", group.material)),
+                        self.siren_recolor_key.unwrap_or_default(),
+                        image.clone(),
+                    )
                 } else {
                     (
                         PathBuf::from(format!("@vehicle/{}", group.material)),
@@ -402,15 +465,6 @@ impl Workbench {
             .iter()
             .filter(|m| m.active)
             .map(|m| viewer::PreviewLight {
-                origin: viewer::convert_position(
-                    self.model
-                        .as_ref()
-                        .and_then(|model| model.sirens.iter().find(|a| a.id == m.id))
-                        .map_or(m.position, |a| a.position),
-                    z_up,
-                ),
-                scale: m.surface_scale * self.session.siren_preview.scale,
-                angle: self.session.pattern.channels[m.channel].delta,
                 id: m.id,
                 position: viewer::convert_position(m.position, z_up),
                 color: m.color,
@@ -418,10 +472,39 @@ impl Workbench {
                 radius: radius * 0.18 * self.session.siren_preview.scale,
             })
             .collect();
+        // The game always faces a siren bone by its delta; only lit sirens scale up.
+        let siren_poses = markers
+            .iter()
+            .map(|m| {
+                let scale = if m.active {
+                    m.surface_scale * self.session.siren_preview.scale
+                } else {
+                    1.
+                };
+                let angle = self.session.pattern.channels[m.channel].delta;
+                let pose = match self
+                    .model
+                    .as_ref()
+                    .and_then(|model| model.sirens.iter().find(|a| a.id == m.id))
+                {
+                    Some(anchor) => anchor.lens_transform(scale, angle),
+                    None => sirens::lens_transform(
+                        Vec3::from(m.position),
+                        glam::Quat::IDENTITY,
+                        glam::Quat::IDENTITY,
+                        scale,
+                        angle,
+                    ),
+                };
+                (m.id, viewer::convert_pose(pose, z_up))
+            })
+            .collect();
         p.add(viewer::callback(
             &self.siren_gpu,
             rect,
             viewer::Frame {
+                baked_lens_materials,
+                lens_colors: duck_workshop::lens_colors::colors(&self.session.pattern),
                 vehicle_opacity: self.session.siren_preview.vehicle_opacity as f32 / 100.,
                 siren_surfaces: true,
                 night: self.session.siren_preview.night,
@@ -432,6 +515,7 @@ impl Workbench {
                 wire: false,
                 paint: [165, 172, 181],
                 lights,
+                siren_poses,
             },
         ));
         let visible: Vec<_> = markers
@@ -555,7 +639,10 @@ impl Workbench {
         }
         let mut open = true;
         let builder = egui::ViewportBuilder::default()
-            .with_title("Duck Workshop · Siren preview")
+            .with_title(format!(
+                "Duck Workshop {} Early Access · Siren preview",
+                env!("CARGO_PKG_VERSION")
+            ))
             .with_inner_size([960., 700.])
             .with_min_inner_size([520., 400.])
             .with_window_level(if self.siren_pin {

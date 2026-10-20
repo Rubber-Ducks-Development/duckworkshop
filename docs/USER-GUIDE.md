@@ -108,9 +108,37 @@ modeled bindings retain position markers; the status shows the number of bound l
 For native imports, nearby legacy PC YTD dictionaries provide diffuse and livery
 textures automatically, including shared dictionaries in the same folder. Supported
 textures up to 4096px are retained in the project; source dictionaries are read only.
-Linked texture assignments override these images. Lens colors come from their authored
-textures; carcols colors control the projected light spill. Changing a carcols color
-does not repaint an existing lens texture.
+Linked texture assignments override these images. Imported lens colors initially use
+their authored textures. Choosing a new Lightboard color enables **Recolor vehicle
+lens**, which updates the visible lens hue in the siren preview while keeping texture
+brightness, detail and alpha. Disable that checkbox to restore the texture's original
+color. The color still controls carcols light spill. Undo/redo, project saves and pattern
+JSON retain the lens setting; a carcols file alone cannot retain texture edits.
+
+Use **Export > FiveM lens colors + carcols (.zip)** to apply visible lens colors in
+FiveM. The archive is a patch for the imported vehicle: copy its YTD files into the
+existing resource's stream folder and replace or merge its matching carcols settings.
+Keep the resource's existing YFT files and manifest. The archive's README explains the
+replacement. Export reads original dictionaries and writes a new ZIP; it does not
+change source files. Development projects reconnect missing source names from their
+known dictionaries, and reopening refreshes missing lens previews without resetting
+the pattern. Projects saved before any native paths were retained need a reimport.
+Source discovery runs independently of the preview cache; lens previews take priority
+when large body textures fill the image budget.
+Native legacy PC YTD DXT1, DXT3, DXT5 and supported 32-bit RGBA/BGRA formats are handled;
+embedded YFT textures, Gen9 textures and externally linked images require a separate
+model/texture editor. BC compression can introduce small color quantization differences.
+
+Some model lights share the same texture pixels. Use **Apply color to linked lenses**
+to give them matching colors before export. Conflicting colors, missing native lens
+pixels or overlap with unassigned geometry stop export with an explanation. If those
+static or unassigned surfaces should change as well, enable **Also recolor shared
+surfaces**. This option is off by default, retained by Undo and project/JSON saves,
+and shows the shared pixel changes in the siren preview. It still requires matching
+colors on linked sirens. For separate colors in a shared UV area, edit the model to
+give those lenses separate texture areas.
+Multi-color steps still need separate siren-bound geometry for each color. Check the
+result in FiveM before using the patch on a live server.
 
 Click a label to select its light/color and open its XYZ position controls. The
 compact blue-outlined number badges sit beside their sirens, shifting locally when
@@ -216,7 +244,8 @@ be imported into Studio. See [the compatibility matrix](COMPATIBILITY.md).
 - The app restores editor settings locally on normal shutdown. Use Ctrl+S to save a
   complete .duckworkshop file with imported geometry, patterns, metadata, comparison
   inputs and links to texture files (the images stay where they are). Ctrl+O reopens it.
-- Inputs are limited to 100 MB, decompressed GTA resources to 256 MB, and models to
+- Individual asset inputs are limited to 100 MB, saved workspaces to 512 MB,
+  decompressed GTA resources to 256 MB, and models to
   two million triangles. Exports/imports of models run in a background worker.
 
 ## Source structure
@@ -283,3 +312,33 @@ embedded. A different public HTTPS signed feed can be selected in Update setting
 
 Maintainers: [RELEASING.md](../RELEASING.md) explains key storage, the signer, optional
 Windows publisher signing, packaging and GitHub release assets.
+
+
+## Independent lens colors (0.3.6 development, Early Access)
+
+Import the original native vehicle folder. Select each siren you want to change
+and choose its color with Recolor vehicle lens enabled. Leave other sirens' lens
+recolor options off to keep their original texture colors. Leave Also recolor
+shared surfaces off. In the Sequencer Export menu choose **FiveM independent
+lens colors + model (.zip)**. Install every supplied YFT and YTD together and
+merge the included carcols settings into the existing vehicle resource.
+
+This operation separates native materials and triangle lists by existing siren
+assignments. It preserves UV coordinates, vertex buffers, bones, physics and
+the original diffuse/dirt/specular materials for unselected surfaces. Base/high
+model variants and matching dictionary variants are included. Texture copies
+increase resource memory and file size. Each streamed system/graphics segment
+is limited to 100,000,000 bytes. The exporter compacts encoded allocations,
+shares identical pixel storage, and detaches that storage before editing just
+one of its texture names. If full-resolution private copies exceed the base
+dictionary budget, existing lower mip levels are used in the base and full
+resolution is retained in the matching +hi dictionary. Install both dictionaries. A triangle spanning different selected sirens needs bone
+assignment edits in a model editor. General mesh modeling and arbitrary bone
+editing are outside this development feature.
+
+Export from the original model when changing these colors again. Reimporting an
+already patched model and separating it repeatedly can duplicate its materials
+and textures. The exporter rejects existing private lens materials. Use the regular lens-color
+ZIP export to recolor an already separated model.
+Original vehicle files are read only. Validate exports in FiveM before using
+them on a live resource. No in-game validation is implied by native readback.

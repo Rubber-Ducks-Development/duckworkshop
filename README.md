@@ -13,7 +13,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/platform-Windows%20x64-0078D4?style=flat-square" alt="Platform: Windows x64">
   <img src="https://img.shields.io/badge/built%20with-Rust-D7B974?style=flat-square" alt="Built with Rust">
-  <img src="https://img.shields.io/badge/source-0.3.4-555555?style=flat-square" alt="Source version 0.3.4">
+  <img src="https://img.shields.io/badge/source-0.3.6--dev.2-555555?style=flat-square" alt="Local development source version 0.3.6-dev.2">
   <img src="https://img.shields.io/badge/status-Early%20Access-D7B974?style=flat-square" alt="Status: Early access">
   <img src="https://img.shields.io/badge/license-MIT-3A3A3A?style=flat-square" alt="License: MIT; third-party notices apply">
 </p>
@@ -29,6 +29,8 @@
 
 > [!NOTE]
 > **Early access.** Duck Workshop is actively being developed. Features and vehicle compatibility may change, and the 3D preview should be checked against the target vehicle in FiveM.
+>
+> **This folder is the local 0.3.6-dev.2 development copy.** Run `Duck-Workshop.exe` here. Independent lens colors are available through **Lightboard > Export > FiveM independent lens colors + model (.zip)**. Leave **Also recolor shared surfaces** off. Install the exported YFT and YTD files together. Nothing from this development copy has been published.
 >
 > **Windows release.** [Download Duck Workshop 0.3.4 Early Access](https://github.com/Rubber-Ducks-Development/duckworkshop/releases/tag/v0.3.4). Use DuckWorkshopSetup.exe to install it, or choose the Windows x64 ZIP for a portable copy. The tools process files locally; only optional update checks use the internet.
 
