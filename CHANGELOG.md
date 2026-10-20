@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.3 - Early Access - 2026-10-20
+
+- Invalid ARGB imports now identify the rejected value, siren settings ID, siren number and XML line/column. Invisible characters are escaped and oversized values are truncated in the error report.
+- Added the imported metadata snapshot's SHA256 and Workshop version to siren-setting import notes, plus **Copy import report** in the preview. Reports are copied locally when requested.
+- Fixed rejection of hexadecimal colors using an uppercase `0X` prefix. Existing lowercase `0x` and unprefixed hexadecimal colors retain their interpretation.
+- This release improves diagnosis of the reported import failure. The supplied rescue resource imports successfully here; the cause of the reported FiveM enlargement after respawning or switching focus remains unconfirmed.
+
 ## 0.3.2 - Early Access - 2026-10-19
 
 - Fixed vehicle metadata discovery for numbered downloads such as `carcols (1).meta` and `carvariations (2).meta`. Matching still uses the vehicle name and siren settings ID; conflicting copies require a choice instead of silently overriding each other.

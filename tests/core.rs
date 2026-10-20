@@ -958,3 +958,55 @@ fn a_loose_yft_does_not_search_parent_folders_for_unrelated_settings() {
             .any(|w| w.contains("No valid matching"))
     );
 }
+
+#[test]
+fn metadata_rejection_reports_the_imported_snapshot_fingerprint_and_color_location() {
+    use duck_workshop::vehicle_resource as vr;
+    use sha2::{Digest, Sha256};
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    let path = root.join("rescue1.yft");
+    let carcols = root.join("carcols.meta");
+    std::fs::write(&path, rsc_fixture("yft")).unwrap();
+    std::fs::write(
+        root.join("carvariations.meta"),
+        meta::variations("rescue1", 4140, 0),
+    )
+    .unwrap();
+    let valid = Pattern {
+        id: 4140,
+        ..Default::default()
+    }
+    .to_xml()
+    .unwrap();
+    let broken = valid.replacen("0xFFFF2323", "0xFFFF000G", 1);
+    assert_ne!(valid, broken);
+    std::fs::write(&carcols, &broken).unwrap();
+    let imported = vr::import_file(&path).unwrap();
+    assert!(imported.pattern.is_none());
+    let error = imported
+        .model
+        .warnings
+        .iter()
+        .find(|w| w.contains("Invalid ARGB color"))
+        .unwrap();
+    assert!(error.contains("ID 4140, siren 1"));
+    assert!(error.contains("0xFFFF000G"));
+    assert!(error.contains(&format!("Workshop {}", env!("CARGO_PKG_VERSION"))));
+    assert!(error.contains(&format!("SHA256 {:x}", Sha256::digest(broken.as_bytes()))));
+    assert!(error.contains("carcols.meta"));
+
+    // Replacing the disk file must not change the fingerprint of the parsed snapshot.
+    std::fs::write(&carcols, &valid).unwrap();
+    assert!(error.contains(&format!("{:x}", Sha256::digest(broken.as_bytes()))));
+    let fixed = vr::import_file(&path).unwrap();
+    assert_eq!(fixed.pattern.unwrap().id, 4140);
+    assert!(
+        fixed
+            .model
+            .warnings
+            .iter()
+            .any(|w| w.contains(&format!("SHA256 {:x}", Sha256::digest(valid.as_bytes()))))
+    );
+    assert_eq!(std::fs::read_to_string(&carcols).unwrap(), valid);
+}

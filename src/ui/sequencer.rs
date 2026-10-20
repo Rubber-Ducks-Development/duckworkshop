@@ -29,7 +29,12 @@ impl Workbench {
             let pattern = if path.extension().is_some_and(|e| e == "json") {
                 serde_json::from_str::<Pattern>(&text).map_err(|e| e.to_string())?
             } else {
-                Pattern::from_xml(&text, 0)?
+                Pattern::from_xml(&text, 0).map_err(|e| {
+                    format!(
+                        "{}: {e}",
+                        duck_workshop::vehicle_resource::metadata_source(&path, &text)
+                    )
+                })?
             };
             pattern.validate()?;
             self.blink_snapshot();

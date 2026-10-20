@@ -4,10 +4,21 @@ use crate::{
     models::{self, Model},
     patterns::Pattern,
 };
+use sha2::Digest;
 use std::{
     collections::BTreeSet,
     path::{Path, PathBuf},
 };
+
+/// Identify the exact UTF-8 snapshot parsed, even if the file changes afterward.
+pub fn metadata_source(path: &Path, source: &str) -> String {
+    format!(
+        "{} [Workshop {}; SHA256 {:x}]",
+        path.display(),
+        env!("CARGO_PKG_VERSION"),
+        sha2::Sha256::digest(source.as_bytes())
+    )
+}
 
 #[derive(Clone, Debug)]
 pub struct Vehicle {
@@ -359,8 +370,10 @@ pub fn import(vehicle: &Vehicle, high: bool) -> Result<Imported> {
                 {
                     if value(item, "id").parse::<u32>().ok() == Some(id) {
                         match Pattern::from_xml(source, i) {
-                            Ok(p) => matches.push((p, source.clone())),
-                            Err(e) => warnings.push(format!("{}: {e}", path.display())),
+                            Ok(p) => matches.push((p, source.clone(), path)),
+                            Err(e) => {
+                                warnings.push(format!("{}: {e}", metadata_source(path, source)))
+                            }
                         }
                     }
                 }
@@ -368,7 +381,12 @@ pub fn import(vehicle: &Vehicle, high: bool) -> Result<Imported> {
         }
     }
     let pattern = if matches.len() == 1 {
-        let (p, s) = matches.remove(0);
+        let (p, s, path) = matches.remove(0);
+        warnings.push(format!(
+            "Imported siren settings ID {} from {}",
+            p.id,
+            metadata_source(path, &s)
+        ));
         metas[3] = Some(s);
         Some(p)
     } else {

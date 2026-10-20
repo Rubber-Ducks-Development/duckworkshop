@@ -4,6 +4,63 @@ use duck_workshop::{
 };
 
 #[test]
+fn imported_argb_accepts_either_hex_prefix_and_preserves_vehicle_scaling() {
+    let source = Pattern {
+        id: 4140,
+        channels: vec![Channel::new("Siren 1".into(), [0x12, 0xab, 0xef])],
+        ..Default::default()
+    }
+    .to_xml()
+    .unwrap()
+    .replace("scaleFactor value=\"100\"", "scaleFactor value=\"10\"");
+    for value in ["0xFF12ABEF", "0Xff12aBeF", "FF12ABEF"] {
+        let xml = source.replace("0xFF12ABEF", value);
+        let imported = Pattern::from_xml(&xml, 0).unwrap();
+        assert_eq!(imported.channels[0].color, [0x12, 0xab, 0xef]);
+        assert_eq!(duck_workshop::sirens::surface_scales(&imported)[0], 10.);
+        let round = Pattern::from_xml(&imported.to_xml().unwrap(), 0).unwrap();
+        assert_eq!(round.channels[0].color, [0x12, 0xab, 0xef]);
+        assert_eq!(duck_workshop::sirens::surface_scales(&round)[0], 10.);
+        assert_eq!(imported.source_xml.as_deref(), Some(xml.as_str()));
+    }
+}
+
+#[test]
+fn invalid_argb_identifies_the_siren_value_and_xml_location() {
+    let source = Pattern {
+        id: 4140,
+        channels: vec![
+            Channel::new("First".into(), [255, 0, 0]),
+            Channel::new("Second".into(), [18, 52, 86]),
+        ],
+        ..Default::default()
+    }
+    .to_xml()
+    .unwrap();
+    for value in ["0xFF12345G", "0x1FFFFFFFF", "0xFF12\u{200b}3456", ""] {
+        let xml = source.replace("0xFF123456", value);
+        let error = Pattern::from_xml(&xml, 0).unwrap_err();
+        assert!(error.contains("ID 4140, siren 2"), "{error}");
+        let doc = duck_workshop::xml_document(&xml).unwrap();
+        let node = doc
+            .descendants()
+            .filter(|n| n.has_tag_name("color"))
+            .nth(1)
+            .unwrap();
+        let pos = doc.text_pos_at(node.range().start);
+        assert!(
+            error.contains(&format!("line {}, column {}", pos.row, pos.col)),
+            "{error}"
+        );
+        assert!(error.contains(&format!("{value:?}")), "{error}");
+    }
+    let oversized = source.replace("0xFF123456", &"G".repeat(10000));
+    let error = Pattern::from_xml(&oversized, 0).unwrap_err();
+    assert!(error.len() < 400);
+    assert!(error.contains("truncated"));
+}
+
+#[test]
 fn a_step_shows_one_color_and_each_color_exports_as_a_siren() {
     let mut p = Pattern::default();
     p.channels.truncate(2);

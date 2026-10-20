@@ -251,6 +251,9 @@ impl Workbench {
             if sirens::missing_surface_scales(model, &self.session.pattern) {
                 ui.label(RichText::new("Light size is unverified: matching carcols settings are missing or incomplete. Lenses without settings stay at their authored size. Import the vehicle folder or its carcols settings.").small().color(ACCENT));
             }
+            if ui.small_button("Copy import report").on_hover_text("Copy the Workshop version, model, active settings and import notes, including the imported file fingerprint.").clicked() {
+                ui.ctx().copy_text(format!("Duck Workshop {}\nModel: {}\nActive sequence: {} (ID {})\nImport notes:\n{}", env!("CARGO_PKG_VERSION"), model.name, self.session.pattern.name, self.session.pattern.id, model.warnings.join("\n")));
+            }
             egui::CollapsingHeader::new(format!("Import notes ({})", model.warnings.len()))
                 .id_salt("siren-import-notes")
                 .show(ui, |ui| {

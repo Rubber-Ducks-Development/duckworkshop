@@ -282,8 +282,22 @@ impl Pattern {
                 .find(|n| n.has_tag_name("flashiness"))
                 .ok_or("Missing flashiness")?;
             let color = val(n, "color");
-            let color = color.trim_start_matches("0x");
-            let parsed = u32::from_str_radix(color, 16).map_err(|_| "Invalid ARGB color")?;
+            let digits = color
+                .strip_prefix("0x")
+                .or_else(|| color.strip_prefix("0X"))
+                .unwrap_or(&color);
+            let parsed = u32::from_str_radix(digits, 16).map_err(|_| {
+                let color_node = n.children().find(|c| c.has_tag_name("color"));
+                let raw = color_node
+                    .and_then(|c| c.attribute("value").or_else(|| c.text()))
+                    .unwrap_or("");
+                let pos = doc.text_pos_at(color_node.unwrap_or(n).range().start);
+                let value: String = raw.chars().take(96).collect();
+                let suffix = if raw.chars().count() > 96 { " (truncated)" } else { "" };
+                let id = val(item, "id").parse::<u32>().ok();
+                let setting = id.map_or_else(|| format!("entry {}", index + 1), |id| format!("ID {id}"));
+                format!("Invalid ARGB color {value:?}{suffix} in siren settings {setting}, siren {}, line {}, column {}. Expected a 32-bit hexadecimal ARGB color such as 0xFFFF0000.", s + 1, pos.row, pos.col)
+            })?;
             let sequence = val(flash, "sequencer")
                 .parse::<u32>()
                 .map_err(|_| "Invalid unsigned sequencer")?;

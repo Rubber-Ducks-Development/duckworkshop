@@ -1,5 +1,26 @@
 # Validation
 
+## ARGB compatibility and import diagnostics, 0.3.3 (2026-10-20)
+
+All 78 Rust tests passed, with formatting, strict all-target Clippy and an
+optimized Windows build. New coverage checks mixed-case hexadecimal colors,
+uppercase `0X` prefixes, preserved imported scale, invalid/overflowing colors,
+invisible characters, bounded diagnostic output, exact siren/line/column context,
+and fingerprints tied to the parsed snapshot rather than subsequent disk changes.
+
+The supplied rescue resource was checked read-only with both model variants.
+Each imported siren settings ID 4140 at 800 BPM, with 20 channels, 20 bones and
+13 preview textures. All 20 scale factors remained 10 after import and re-export.
+The import note's SHA256 matched the source file's independent hash. The supplied
+log maps `rescue1` from ID 4140 to internal slot 21 and records no duplicate IDs.
+
+The reported generic ARGB failure remains unreproduced with the supplied bytes.
+The corrected uppercase-prefix restriction is a separate reproduced parser issue;
+the supplied file uses lowercase prefixes. Detailed import notes and the local
+Copy import report action capture evidence if the original failure reappears.
+No new GPU appearance check or reproduction of the FiveM focus/respawn issue is
+claimed. No user vehicle assets are included in the release.
+
 ## Matching vehicle settings and lens scale, 0.3.2 (2026-10-19)
 
 All 75 Rust tests passed. New regression coverage checks numbered metadata
