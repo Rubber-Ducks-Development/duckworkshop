@@ -8,7 +8,7 @@
     <PlatformTarget>x64</PlatformTarget>
     <AssemblyName>DuckWorkshopSetup</AssemblyName>
     <RootNamespace>DuckWorkshop.Setup</RootNamespace>
-    <Version>0.3.3</Version>
+    <Version>0.3.4</Version>
     <Product>Duck Workshop Setup</Product>
     <ApplicationIcon>../assets/duck-workshop.ico</ApplicationIcon>
     <StartupObject>DuckWorkshop.Setup.Program</StartupObject>

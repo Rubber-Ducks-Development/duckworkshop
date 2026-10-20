@@ -1,5 +1,13 @@
 # Duck Studio alignment review and reference lock
 
+## Vertical Lightboard, October 20, 0.3.4
+
+Direct-build reference: the existing Workshop grid and the user's request to edit
+from top to bottom. Preserve the charcoal theme, compact colored cells, light
+color dots, numbered steps, eight-step grouping and separate preview. Transpose
+time to rows and lights to columns. Keep headers visible while scrolling down,
+and label shifts Up / Down to match time movement. No new visual system.
+
 ## Preview and stripe controls, October 16
 
 Direct-build lock: the user's two Workshop screenshots and the existing Studio

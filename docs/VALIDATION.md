@@ -1,5 +1,20 @@
 # Validation
 
+## Vertical Lightboard, 0.3.4 (2026-10-20)
+
+All 80 Rust tests passed, including two egui interaction regressions that use the
+actual grid responses. They cover vertical drag fill, right-click erasing, one undo
+per stroke, redo, XML sequence order, wrapping Up/Down shifts, light selection,
+step scrubbing, and scrolling to step 32 and light 32 in a narrow viewport.
+Formatting, strict all-target Clippy and the optimized Windows build passed.
+All 11 installer engine checks passed.
+
+An isolated eframe/OpenGL harness rendered the actual Lightboard component at
+1240 x 940 with an eight-light demonstration pattern. The captured frame verifies
+readable column headers, downward step order, the active row and Up/Down controls.
+It does not simulate FiveM or make a new vehicle-rendering claim. No user vehicle
+assets are included.
+
 ## ARGB compatibility and import diagnostics, 0.3.3 (2026-10-20)
 
 All 78 Rust tests passed, with formatting, strict all-target Clippy and an

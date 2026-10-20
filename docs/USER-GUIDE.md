@@ -64,11 +64,15 @@ background remain editable. **Show texture** displays linked artwork in place of
 color guide; turn it off to inspect the template colors. PNG exports bake the guide;
 SVG exports embed its shading as a PNG while retaining editable vector lines.
 
-**Lightboard:** Lights with a 32-step sequence, intensity and direction. A light can
+**Lightboard:** Lights are columns across the top, and the 32 sequence steps run
+from top to bottom. Click a light header to select it, or a step number to pause and
+preview that step. Scroll down for later steps; light headers stay visible. Wide
+patterns scroll horizontally. Shift Up / Shift Down moves the selected light's
+pattern by one step, wrapping at steps 01 and 32. A light can
 have up to six colors: add colors with +, pick the highlighted color and paint, and each
 step shows one of them. carcols allows one color per siren, so each color of a light is
 exported as its own siren (32 in total); give those sirens bones in the same spot on the
-model. Merge Into Light Above combines two imported sirens into one multi-color light.
+model. Merge Into Previous Light combines two imported sirens into one multi-color light.
 Click or drag to paint steps. Undo/redo, invert, shift, and clear are available. Save/load JSON,
 import carcols with multiple siren settings, export binary/unsigned decimal sequences,
 or export complete carcols. Siren IDs support unsigned 32-bit values (1–4294967295),

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.4 - Early Access - 2026-10-20
+
+- Turned the Lightboard sequence grid vertically: lights are columns across the top, and steps 01-32 run downward. The active step highlights a row.
+- Light headers stay visible while scrolling through steps; wide patterns scroll horizontally to reach all 32 lights.
+- Renamed shift controls to Shift Up / Shift Down and the merge action to Merge Into Previous Light. Painting, right-click erasing, drag fill, undo/redo, timing and exported sequence order are preserved.
+
 ## 0.3.3 - Early Access - 2026-10-20
 
 - Invalid ARGB imports now identify the rejected value, siren settings ID, siren number and XML line/column. Invisible characters are escaped and oversized values are truncated in the error report.

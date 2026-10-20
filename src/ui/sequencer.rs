@@ -209,7 +209,7 @@ impl Workbench {
                         ui.label(RichText::new("PATTERN").strong().small().color(DIM_TEXT));
                         ui.label(
                             RichText::new(format!(
-                                "{} lights · 32 steps",
+                                "{} lights · 32 steps ↓",
                                 self.session.pattern.channels.len()
                             ))
                             .small()
@@ -342,10 +342,10 @@ impl Workbench {
             }
         });
         ui.horizontal(|ui| {
-            if ui.button("Shift Left").clicked() {
+            if ui.button("Shift Up").clicked() {
                 self.sequence_operation(1);
             }
-            if ui.button("Shift Right").clicked() {
+            if ui.button("Shift Down").clicked() {
                 self.sequence_operation(2);
             }
         });
@@ -414,8 +414,8 @@ impl Workbench {
             }
         });
         if ui
-            .add_enabled(selected > 0, egui::Button::new("Merge Into Light Above"))
-            .on_hover_text("Adds this light's colors and steps to the light above it")
+            .add_enabled(selected > 0, egui::Button::new("Merge Into Previous Light"))
+            .on_hover_text("Adds this light's colors and steps to the previous light")
             .clicked()
         {
             let before = self.session.pattern.clone();
@@ -609,10 +609,13 @@ impl Workbench {
     }
 
     fn sequence_grid(&mut self, ui: &mut egui::Ui) {
-        let cell = ((ui.available_width() - 116.) / 32.).clamp(17., 38.);
-        let gap = 6.;
-        let left = 72.;
-        let total = left + cell * 32. + gap * 3.;
+        let column = ((ui.available_width() - 90.)
+            / self.session.pattern.channels.len().max(1) as f32)
+            .clamp(28., 46.);
+        let row_height = ((ui.available_height() - 82.) / 32.).clamp(20., 28.);
+        let left = 48.;
+        let total = left + column * self.session.pattern.channels.len() as f32;
+        let grid_id = ui.id().with("sequence-grid");
         let mut selection = None;
         let mut paint = None;
         let down = ui.input(|i| i.pointer.primary_down() || i.pointer.secondary_down());
@@ -628,69 +631,40 @@ impl Workbench {
             .inner_margin(10.)
             .show(ui, |ui| {
                 let height = ui.available_height().max(100.);
-                egui::ScrollArea::both()
-                    .id_salt("sequence-grid")
-                    .max_height(height)
+                ui.spacing_mut().item_spacing.y = 0.;
+                egui::ScrollArea::horizontal()
+                    .id_salt("sequence-columns")
+                    .auto_shrink([false, false])
                     .show(ui, |ui| {
+                        // Keep light headers visible while scrolling through the steps.
                         let (header, _) =
-                            ui.allocate_exact_size(Vec2::new(total, 28.), Sense::hover());
-                        for step in 0..32 {
-                            let x =
-                                header.left() + left + step as f32 * cell + (step / 8) as f32 * gap;
-                            let r = Rect::from_min_size(
-                                Pos2::new(x, header.top()),
-                                Vec2::new(cell, 28.),
-                            );
-                            if step == self.blink_step {
-                                ui.painter().rect_filled(
-                                    r.shrink2(Vec2::new(2., 3.)),
-                                    3.,
-                                    Color32::from_rgb(0x55, 0x4C, 0x36),
-                                );
-                            }
-                            ui.painter().text(
-                                r.center(),
-                                Align2::CENTER_CENTER,
-                                format!("{:02}", step + 1),
-                                egui::FontId::monospace(11.),
-                                if step == self.blink_step {
-                                    ACCENT
-                                } else {
-                                    DIM_TEXT
-                                },
-                            );
-                            let response =
-                                ui.interact(r, ui.id().with(("step", step)), Sense::click());
-                            response.widget_info(|| {
-                                egui::WidgetInfo::labeled(
-                                    egui::WidgetType::Button,
-                                    true,
-                                    format!("Preview step {}", step + 1),
-                                )
-                            });
-                            if response.clicked() {
-                                self.blink_step = step;
-                                self.blink_play = false;
-                            }
-                        }
+                            ui.allocate_exact_size(Vec2::new(total, 44.), Sense::hover());
+                        ui.painter().text(
+                            header.left_center() + Vec2::new(2., 0.),
+                            Align2::LEFT_CENTER,
+                            "STEP ↓",
+                            egui::FontId::monospace(10.),
+                            DIM_TEXT,
+                        );
                         for (i, channel) in self.session.pattern.channels.iter().enumerate() {
-                            let (row, _) =
-                                ui.allocate_exact_size(Vec2::new(total, 31.), Sense::hover());
+                            let label = Rect::from_min_size(
+                                header.min + Vec2::new(left + i as f32 * column, 0.),
+                                Vec2::new(column, 40.),
+                            );
                             if i == self.blink_selected {
-                                ui.painter().rect_filled(row, 3., PANEL_BG);
+                                ui.painter().rect_filled(label.shrink(1.), 3., PANEL_BG);
                             }
-                            let label = Rect::from_min_size(row.min, Vec2::new(left - 5., 31.));
                             let dots = channel.color_count().min(3);
                             for d in 0..dots {
                                 ui.painter().circle_filled(
-                                    label.left_center()
-                                        + Vec2::new(10., (d as f32 - (dots - 1) as f32 / 2.) * 7.),
+                                    label.center_top()
+                                        + Vec2::new((d as f32 - (dots - 1) as f32 / 2.) * 8., 9.),
                                     3.,
                                     rgb(channel.color_at(d)),
                                 );
                             }
                             ui.painter().text(
-                                label.center() + Vec2::new(5., 0.),
+                                label.center() + Vec2::new(0., 5.),
                                 Align2::CENTER_CENTER,
                                 format!("{:02}", i + 1),
                                 egui::FontId::monospace(12.),
@@ -701,7 +675,7 @@ impl Workbench {
                                 },
                             );
                             let response = ui
-                                .interact(label, ui.id().with(("light-row", i)), Sense::click())
+                                .interact(label, grid_id.with(("light", i)), Sense::click())
                                 .on_hover_text(&channel.name);
                             response.widget_info(|| {
                                 egui::WidgetInfo::labeled(
@@ -711,92 +685,149 @@ impl Workbench {
                                 )
                             });
                             if response.clicked() {
-                                selection = Some(i)
-                            }
-                            for step in 0..32 {
-                                let x = row.left()
-                                    + left
-                                    + step as f32 * cell
-                                    + (step / 8) as f32 * gap;
-                                let r = Rect::from_min_size(
-                                    Pos2::new(x, row.top() + 3.),
-                                    Vec2::new(cell - 3., 25.),
-                                );
-                                let lit = channel.step(step);
-                                let active = lit.is_some();
-                                let color = match lit {
-                                    Some(c) => rgb(channel.color_at(c)),
-                                    None => CELL_OFF[(step / 4) % 2],
-                                };
-                                ui.painter().rect_filled(r, 2., color);
-                                if step == self.blink_step {
-                                    ui.painter().rect_stroke(
-                                        r,
-                                        2.,
-                                        Stroke::new(
-                                            1.0_f32,
-                                            if active {
-                                                Color32::WHITE
-                                            } else {
-                                                Color32::from_rgb(0x8A, 0x7A, 0x50)
-                                            },
-                                        ),
-                                        egui::StrokeKind::Inside,
-                                    );
-                                }
-                                let response = ui.interact(
-                                    r,
-                                    ui.id().with(("sequence-cell", i, step)),
-                                    Sense::click_and_drag(),
-                                );
-                                response.widget_info(|| {
-                                    egui::WidgetInfo::selected(
-                                        egui::WidgetType::Checkbox,
-                                        true,
-                                        active,
-                                        format!("{} step {}", channel.name, step + 1),
-                                    )
-                                });
-                                let inside = ui
-                                    .input(|input| input.pointer.interact_pos())
-                                    .is_some_and(|p| r.contains(p) && ui.clip_rect().contains(p));
-                                // The light's paint color; lights with fewer colors use their last.
-                                let brush = if i == self.blink_selected {
-                                    self.blink_brush
-                                } else {
-                                    0
-                                }
-                                .min(channel.color_count() - 1);
-                                if inside && pressed {
-                                    self.paint_value = Some(
-                                        if ui.input(|i| i.pointer.secondary_down())
-                                            || lit == Some(brush)
-                                        {
-                                            None
-                                        } else {
-                                            Some(brush)
-                                        },
-                                    );
-                                    self.paint_started = false;
-                                }
-                                if inside
-                                    && down
-                                    && let Some(value) = self.paint_value
-                                {
-                                    paint = Some((i, step, value));
-                                }
-                                if (response.clicked() || response.secondary_clicked()) && !down {
-                                    let value = self.paint_value.unwrap_or_else(|| {
-                                        if response.secondary_clicked() || lit == Some(brush) {
-                                            None
-                                        } else {
-                                            Some(brush)
-                                        }
-                                    });
-                                    paint = Some((i, step, value));
-                                }
+                                selection = Some(i);
                             }
                         }
+                        egui::ScrollArea::vertical()
+                            .id_salt("sequence-steps")
+                            .max_height((height - 44.).max(60.))
+                            .auto_shrink([false, false])
+                            .show(ui, |ui| {
+                                for step in 0..32 {
+                                    if step > 0 && step % 8 == 0 {
+                                        ui.add_space(6.);
+                                    }
+                                    let (row, _) = ui.allocate_exact_size(
+                                        Vec2::new(total, row_height),
+                                        Sense::hover(),
+                                    );
+                                    if step == self.blink_step {
+                                        ui.painter().rect_filled(
+                                            row,
+                                            3.,
+                                            Color32::from_rgb(0x55, 0x4C, 0x36),
+                                        );
+                                    }
+                                    let label = Rect::from_min_size(
+                                        row.min,
+                                        Vec2::new(left - 4., row_height),
+                                    );
+                                    ui.painter().text(
+                                        label.center(),
+                                        Align2::CENTER_CENTER,
+                                        format!("{:02}", step + 1),
+                                        egui::FontId::monospace(11.),
+                                        if step == self.blink_step {
+                                            ACCENT
+                                        } else {
+                                            DIM_TEXT
+                                        },
+                                    );
+                                    let response = ui.interact(
+                                        label,
+                                        grid_id.with(("step", step)),
+                                        Sense::click(),
+                                    );
+                                    response.widget_info(|| {
+                                        egui::WidgetInfo::labeled(
+                                            egui::WidgetType::Button,
+                                            true,
+                                            format!("Preview step {}", step + 1),
+                                        )
+                                    });
+                                    if response.clicked() {
+                                        self.blink_step = step;
+                                        self.blink_play = false;
+                                    }
+                                    for (i, channel) in
+                                        self.session.pattern.channels.iter().enumerate()
+                                    {
+                                        let r = Rect::from_min_size(
+                                            row.min + Vec2::new(left + i as f32 * column, 2.),
+                                            Vec2::new(column - 3., row_height - 4.),
+                                        );
+                                        let lit = channel.step(step);
+                                        let active = lit.is_some();
+                                        let color = match lit {
+                                            Some(c) => rgb(channel.color_at(c)),
+                                            None => CELL_OFF[(step / 4) % 2],
+                                        };
+                                        ui.painter().rect_filled(r, 2., color);
+                                        if step == self.blink_step {
+                                            ui.painter().rect_stroke(
+                                                r,
+                                                2.,
+                                                Stroke::new(
+                                                    1.0_f32,
+                                                    if active {
+                                                        Color32::WHITE
+                                                    } else {
+                                                        Color32::from_rgb(0x8A, 0x7A, 0x50)
+                                                    },
+                                                ),
+                                                egui::StrokeKind::Inside,
+                                            );
+                                        }
+                                        let response = ui.interact(
+                                            r,
+                                            grid_id.with(("cell", i, step)),
+                                            Sense::click_and_drag(),
+                                        );
+                                        response.widget_info(|| {
+                                            egui::WidgetInfo::selected(
+                                                egui::WidgetType::Checkbox,
+                                                true,
+                                                active,
+                                                format!("{} step {}", channel.name, step + 1),
+                                            )
+                                        });
+                                        let inside = ui
+                                            .input(|input| input.pointer.interact_pos())
+                                            .is_some_and(|p| {
+                                                r.contains(p) && ui.clip_rect().contains(p)
+                                            });
+                                        // The light's paint color; lights with fewer colors use their last.
+                                        let brush = if i == self.blink_selected {
+                                            self.blink_brush
+                                        } else {
+                                            0
+                                        }
+                                        .min(channel.color_count() - 1);
+                                        if inside && pressed {
+                                            self.paint_value = Some(
+                                                if ui.input(|i| i.pointer.secondary_down())
+                                                    || lit == Some(brush)
+                                                {
+                                                    None
+                                                } else {
+                                                    Some(brush)
+                                                },
+                                            );
+                                            self.paint_started = false;
+                                        }
+                                        if inside
+                                            && down
+                                            && let Some(value) = self.paint_value
+                                        {
+                                            paint = Some((i, step, value));
+                                        }
+                                        if (response.clicked() || response.secondary_clicked())
+                                            && !down
+                                        {
+                                            let value = self.paint_value.unwrap_or_else(|| {
+                                                if response.secondary_clicked()
+                                                    || lit == Some(brush)
+                                                {
+                                                    None
+                                                } else {
+                                                    Some(brush)
+                                                }
+                                            });
+                                            paint = Some((i, step, value));
+                                        }
+                                    }
+                                }
+                            });
                     });
             });
         if let Some(i) = selection {
@@ -807,7 +838,7 @@ impl Workbench {
             // Fill skipped cells when fast pointer movement spans multiple steps.
             let previous = self
                 .paint_previous
-                .filter(|(row, _)| *row == i)
+                .filter(|(channel, _)| *channel == i)
                 .map_or(step, |(_, previous)| previous);
             let range = previous.min(step)..=previous.max(step);
             if range
@@ -860,4 +891,179 @@ fn sequence_style(ui: &egui::Ui) -> egui::Style {
     style.spacing.item_spacing = Vec2::new(8., 7.);
     style.spacing.button_padding = Vec2::new(10., 5.);
     style
+}
+
+#[cfg(test)]
+mod grid_tests {
+    use super::*;
+
+    struct Grid {
+        ctx: egui::Context,
+        app: Workbench,
+        id: egui::Id,
+        size: Vec2,
+    }
+
+    impl Grid {
+        fn new(channels: usize, size: Vec2) -> Self {
+            let ctx = egui::Context::default();
+            let mut app = Workbench::new(&eframe::CreationContext::_new_kittest(ctx.clone()));
+            app.session.pattern.channels = (0..channels)
+                .map(|i| patterns::Channel::new(format!("Light {}", i + 1), [255, 45, 55]))
+                .collect();
+            app.sync_decimal();
+            let mut grid = Self {
+                ctx,
+                app,
+                id: egui::Id::NULL,
+                size,
+            };
+            grid.frame(vec![]);
+            grid.frame(vec![]);
+            grid
+        }
+
+        fn frame(&mut self, events: Vec<egui::Event>) {
+            let _ = self.ctx.run(
+                egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(Pos2::ZERO, self.size)),
+                    events,
+                    ..Default::default()
+                },
+                |ctx| {
+                    egui::CentralPanel::default().show(ctx, |ui| {
+                        self.id = ui.id().with("sequence-grid");
+                        self.app.sequence_grid(ui);
+                    });
+                },
+            );
+        }
+
+        fn rect(&self, key: impl std::hash::Hash) -> Rect {
+            self.ctx
+                .read_response(self.id.with(key))
+                .expect("grid widget")
+                .rect
+        }
+
+        fn pointer(&mut self, pos: Pos2, button: egui::PointerButton, pressed: bool) {
+            self.frame(vec![
+                egui::Event::PointerMoved(pos),
+                egui::Event::PointerButton {
+                    pos,
+                    button,
+                    pressed,
+                    modifiers: egui::Modifiers::NONE,
+                },
+            ]);
+        }
+
+        fn click(&mut self, key: impl std::hash::Hash) {
+            let pos = self.rect(key).center();
+            self.pointer(pos, egui::PointerButton::Primary, true);
+            self.pointer(pos, egui::PointerButton::Primary, false);
+        }
+    }
+
+    #[test]
+    fn vertical_grid_paints_skipped_steps_and_keeps_undo_export_order() {
+        let mut grid = Grid::new(8, Vec2::new(900., 1000.));
+        let first = grid.rect(("cell", 0usize, 0usize));
+        let next_step = grid.rect(("cell", 0usize, 1usize));
+        let next_light = grid.rect(("cell", 1usize, 0usize));
+        assert_eq!(first.left(), next_step.left());
+        assert!(next_step.top() > first.bottom());
+        assert_eq!(first.top(), next_light.top());
+        assert!(next_light.left() > first.right());
+
+        grid.pointer(first.center(), egui::PointerButton::Primary, true);
+        let fourth = grid.rect(("cell", 0usize, 3usize)).center();
+        grid.frame(vec![egui::Event::PointerMoved(fourth)]);
+        grid.pointer(fourth, egui::PointerButton::Primary, false);
+        assert_eq!(
+            &grid.app.session.pattern.channels[0].bits[..5],
+            &[true, true, true, true, false]
+        );
+        assert!(grid.app.session.pattern.channels[1].bits.iter().all(|b| !b));
+        assert_eq!(
+            grid.app.blink_undo.len(),
+            1,
+            "one undo for the entire stroke"
+        );
+        let xml = grid.app.session.pattern.to_xml().unwrap();
+        let imported = Pattern::from_xml(&xml, 0).unwrap();
+        assert_eq!(
+            imported.channels[0].bits,
+            grid.app.session.pattern.channels[0].bits
+        );
+        grid.app.undo_sequence();
+        assert!(grid.app.session.pattern.channels[0].bits.iter().all(|b| !b));
+        grid.app.redo_sequence();
+        assert!(grid.app.session.pattern.channels[0].bits[3]);
+
+        let second = grid.rect(("cell", 0usize, 1usize)).center();
+        grid.pointer(second, egui::PointerButton::Secondary, true);
+        grid.pointer(second, egui::PointerButton::Secondary, false);
+        assert!(!grid.app.session.pattern.channels[0].bits[1]);
+        assert!(grid.app.session.pattern.channels[0].bits[0]);
+        grid.app.sequence_operation(1);
+        assert!(
+            grid.app.session.pattern.channels[0].bits[31],
+            "up wraps the first step to the bottom"
+        );
+        grid.app.sequence_operation(2);
+        assert!(grid.app.session.pattern.channels[0].bits[0]);
+    }
+
+    #[test]
+    fn vertical_grid_selects_columns_scrubs_rows_and_scrolls_to_last_step() {
+        let mut grid = Grid::new(32, Vec2::new(450., 420.));
+        grid.click(("light", 2usize));
+        assert_eq!(grid.app.blink_selected, 2);
+        grid.app.blink_play = true;
+        grid.click(("step", 5usize));
+        assert_eq!(grid.app.blink_step, 5);
+        assert!(!grid.app.blink_play);
+        let header = grid.rect(("light", 0usize));
+        let first_before = grid.rect(("cell", 0usize, 0usize));
+        let pos = grid.rect(("cell", 0usize, 4usize)).center();
+        grid.frame(vec![
+            egui::Event::PointerMoved(pos),
+            egui::Event::MouseWheel {
+                unit: egui::MouseWheelUnit::Point,
+                delta: Vec2::new(0., -1200.),
+                modifiers: egui::Modifiers::NONE,
+            },
+        ]);
+        for _ in 0..40 {
+            grid.frame(vec![]);
+        }
+        assert_eq!(
+            header,
+            grid.rect(("light", 0usize)),
+            "headers stay visible during vertical scrolling"
+        );
+        assert!(grid.rect(("cell", 0usize, 0usize)).top() < first_before.top());
+        let last = grid.rect(("cell", 0usize, 31usize));
+        assert!(last.top() > header.bottom() && last.bottom() < grid.size.y);
+        grid.click(("cell", 0usize, 31usize));
+        assert!(grid.app.session.pattern.channels[0].bits[31]);
+        let before = grid.rect(("light", 31usize));
+        grid.frame(vec![
+            egui::Event::PointerMoved(pos),
+            egui::Event::MouseWheel {
+                unit: egui::MouseWheelUnit::Point,
+                delta: Vec2::new(-1600., 0.),
+                modifiers: egui::Modifiers::NONE,
+            },
+        ]);
+        for _ in 0..40 {
+            grid.frame(vec![]);
+        }
+        let after = grid.rect(("light", 31usize));
+        assert!(after.left() < before.left());
+        assert!(after.right() < grid.size.x);
+        grid.click(("light", 31usize));
+        assert_eq!(grid.app.blink_selected, 31);
+    }
 }

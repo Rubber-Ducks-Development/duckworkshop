@@ -13,7 +13,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/platform-Windows%20x64-0078D4?style=flat-square" alt="Platform: Windows x64">
   <img src="https://img.shields.io/badge/built%20with-Rust-D7B974?style=flat-square" alt="Built with Rust">
-  <img src="https://img.shields.io/badge/source-0.3.3-555555?style=flat-square" alt="Source version 0.3.3">
+  <img src="https://img.shields.io/badge/source-0.3.4-555555?style=flat-square" alt="Source version 0.3.4">
   <img src="https://img.shields.io/badge/status-Early%20Access-D7B974?style=flat-square" alt="Status: Early access">
   <img src="https://img.shields.io/badge/license-MIT-3A3A3A?style=flat-square" alt="License: MIT; third-party notices apply">
 </p>
@@ -30,12 +30,12 @@
 > [!NOTE]
 > **Early access.** Duck Workshop is actively being developed. Features and vehicle compatibility may change, and the 3D preview should be checked against the target vehicle in FiveM.
 >
-> **Windows release.** [Download Duck Workshop 0.3.3 Early Access](https://github.com/Rubber-Ducks-Development/duckworkshop/releases/tag/v0.3.3). Use DuckWorkshopSetup.exe to install it, or choose the Windows x64 ZIP for a portable copy. This repository is private, so downloads require repository access. The tools process files locally; only optional update checks use the internet.
+> **Windows release.** [Download Duck Workshop 0.3.4 Early Access](https://github.com/Rubber-Ducks-Development/duckworkshop/releases/tag/v0.3.4). Use DuckWorkshopSetup.exe to install it, or choose the Windows x64 ZIP for a portable copy. The tools process files locally; only optional update checks use the internet.
 
 <p align="center">
-  <img src="docs/images/lightboard.png" alt="Duck Workshop Lightboard with eight demonstration red and blue light channels in the 32-step sequencer" width="100%">
+  <img src="docs/images/lightboard.png" alt="Duck Workshop Lightboard with eight demonstration red and blue light columns in the vertical 32-step sequencer" width="100%">
   <br>
-  <sub>The real Lightboard with an eight-channel demonstration pattern. The schematic preview is not an in-game lighting simulation.</sub>
+  <sub>The Lightboard editor with an eight-light demonstration pattern. Steps run from top to bottom.</sub>
 </p>
 
 <table>
@@ -64,7 +64,7 @@ No vehicle models or private workspaces are shown. See [image sources](docs/imag
 | --- | --- |
 | UV Editor | Automatically isolate the livery material and UV channel, then export a 4096px colored surface guide with fine wireframe lines, or choose transparent outlines and wireframes. |
 | Live textures | Load PNG, JPG, PSD, DDS and other supported images. Linked textures reload after a stable save, so artwork changes appear while you keep painting in another editor. |
-| Lightboard | Paint a 32-step sequencer and preview flashing lightbar lens surfaces with their vehicle textures, glow and numbered labels. Use Night or Lightbar view, resize and pin the separate preview window. Import/export carcols and retain unrelated XML. |
+| Lightboard | Paint a vertical 32-step sequencer, with lights across the top and time running downward, and preview flashing lightbar lens surfaces with their vehicle textures, glow and numbered labels. Use Night or Lightbar view, resize and pin the separate preview window. Import/export carcols and retain unrelated XML. |
 | Stripe Designer | Choose six warning-stripe presets, mirror across an adjustable seam and add honeycomb or 3M 983-style reflective texture. Export transparent PNGs up to 8192 pixels per dimension, optionally clipped to the current UV selection. |
 | Meta Editor | Edit handling, vehicles, carvariations and carcols files. Choose entries, use guided fields or raw XML, validate changes and export individual files or a resource ZIP. |
 | Handling Compare | Match handling entries by name, filter changes and export CSV/JSON. Exact decimal-string comparison catches differences below floating-point precision. |
