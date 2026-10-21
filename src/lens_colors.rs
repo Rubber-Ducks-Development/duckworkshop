@@ -95,7 +95,7 @@ fn coverage(model: &Model, texture: &str, w: u32, h: u32) -> Result<Vec<u64>> {
         if uv.is_empty() {
             continue;
         }
-        for tri in mesh.indices.chunks_exact(3) {
+        for tri in mesh.indices.as_chunks::<3>().0 {
             let ids = tri.map_indices(|i| mesh.siren_ids.get(i).copied().unwrap_or(0));
             let id = if material.is_light_emissive()
                 && ids[0] == ids[1]
@@ -469,6 +469,7 @@ mod tests {
                     indices: vec![0, 1, 2],
                     uvs: vec![vec![[0., 0.], [1., 0.], [0., 1.]]],
                     siren_ids: vec![*id; 3],
+                    extra_ids: vec![],
                     vertex_alpha: vec![],
                 })
                 .collect(),

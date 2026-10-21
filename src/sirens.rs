@@ -5,7 +5,10 @@ use crate::{
 };
 use glam::{Mat4, Quat, Vec3};
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
+
+/// Highest `extra_N` bone number read from a vehicle.
+pub const MAX_EXTRA: u8 = 32;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SirenAnchor {
@@ -73,6 +76,10 @@ pub struct PreviewSettings {
     pub scale: f32,
     pub vehicle_opacity: u8,
     pub positions: BTreeMap<u8, [f32; 3]>,
+    /// Lens glow around lit sirens.
+    pub bloom: bool,
+    /// Vehicle extras hidden in the preview.
+    pub hidden_extras: BTreeSet<u8>,
 }
 impl Default for PreviewSettings {
     fn default() -> Self {
@@ -83,6 +90,8 @@ impl Default for PreviewSettings {
             scale: 1.,
             vehicle_opacity: 100,
             positions: BTreeMap::new(),
+            bloom: true,
+            hidden_extras: BTreeSet::new(),
         }
     }
 }
@@ -92,6 +101,10 @@ impl PreviewSettings {
             || !(0.25..=4.).contains(&self.scale)
             || self.vehicle_opacity > 100
             || self.positions.len() > 32
+            || self
+                .hidden_extras
+                .iter()
+                .any(|id| !(1..=MAX_EXTRA).contains(id))
             || self.positions.iter().any(|(&id, p)| {
                 !(1..=32).contains(&id) || p.iter().any(|v| !v.is_finite() || v.abs() > 10000.)
             })
@@ -110,22 +123,29 @@ pub(crate) struct BonePose {
     pub scale: [f32; 3],
 }
 pub(crate) fn bone_channels(bones: &[BonePose]) -> Result<Vec<u8>> {
+    bone_tags(bones, "siren", 32)
+}
+/// The `extra_N` bone each bone belongs to, through its parents, or 0.
+pub(crate) fn bone_extras(bones: &[BonePose]) -> Result<Vec<u8>> {
+    bone_tags(bones, "extra_", MAX_EXTRA)
+}
+fn bone_tags(bones: &[BonePose], prefix: &str, max: u8) -> Result<Vec<u8>> {
     (0..bones.len())
         .map(|index| {
             let mut current = Some(index);
             let mut seen = vec![false; bones.len()];
             while let Some(i) = current {
                 if i >= bones.len() || seen[i] {
-                    return Err("Invalid siren bone hierarchy".into());
+                    return Err("Invalid bone hierarchy".into());
                 }
                 seen[i] = true;
                 let bone = &bones[i];
                 if let Some(id) = bone
                     .name
                     .to_ascii_lowercase()
-                    .strip_prefix("siren")
+                    .strip_prefix(prefix)
                     .and_then(|name| name.parse::<u8>().ok())
-                    .filter(|id| (1..=32).contains(id))
+                    .filter(|id| (1..=max).contains(id))
                 {
                     return Ok(id);
                 }
@@ -351,6 +371,7 @@ pub fn schematic_model() -> Model {
         meshes: vec![Mesh {
             vertex_alpha: vec![],
             siren_ids: vec![],
+            extra_ids: vec![],
             name: "Lightbar housing".into(),
             material: "Housing".into(),
             lod: "High".into(),
@@ -399,6 +420,25 @@ mod tests {
         let mut bad = bones;
         bad[0].parent = 1;
         assert!(bone_anchors(&bad).is_err());
+    }
+    #[test]
+    fn extras_are_found_through_parent_bones() {
+        let bone = |name: &str, parent| BonePose {
+            name: name.into(),
+            parent,
+            position: [0.; 3],
+            rotation: Quat::IDENTITY.to_array(),
+            scale: [1.; 3],
+        };
+        let bones = vec![
+            bone("chassis", -1),
+            bone("Extra_12", 0),
+            bone("siren3", 1),
+            bone("extra_99", 0),
+            bone("door_dside_f", 0),
+        ];
+        assert_eq!(bone_extras(&bones).unwrap(), [0, 12, 12, 0, 0]);
+        assert_eq!(bone_channels(&bones).unwrap(), [0, 0, 3, 0, 0]);
     }
     #[test]
     fn ids_follow_export_order_and_multicolor_channels_share_schematic_positions() {

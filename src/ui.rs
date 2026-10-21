@@ -83,6 +83,12 @@ pub struct Workbench {
     siren_recolor_key: Option<u64>,
     siren_recolor_error: Option<String>,
     siren_version: u64,
+    /// Hidden extras the current siren scene was built with.
+    siren_hidden_extras: std::collections::BTreeSet<u8>,
+    /// Extras with geometry in the current model.
+    siren_extras: Vec<u8>,
+    /// Counts siren scene builds, so the GPU re-uploads a rebuilt scene.
+    siren_builds: u64,
     siren_gpu: viewer::SharedGpu,
     siren_popout: bool,
     siren_was_lightboard: bool,
@@ -188,6 +194,9 @@ impl Workbench {
             siren_recolor_key: None,
             siren_recolor_error: None,
             siren_version: u64::MAX,
+            siren_hidden_extras: Default::default(),
+            siren_extras: vec![],
+            siren_builds: 0,
             siren_gpu: Default::default(),
             siren_popout: false,
             siren_was_lightboard: false,
@@ -1160,6 +1169,7 @@ impl Workbench {
             paint: self.paint,
             lights: vec![],
             siren_poses: vec![],
+            bloom: false,
         };
         p.add(viewer::callback(&self.gpu, rect, frame));
         let mut y = rect.top() + 12.;

@@ -12,6 +12,10 @@ pub struct Mesh {
     pub vertex_alpha: Vec<u8>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub siren_ids: Vec<u8>,
+    /// Vehicle extra (`extra_N` bone) each vertex belongs to, 0 for none.
+    /// Empty when the model has no extras.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub extra_ids: Vec<u8>,
     pub name: String,
     pub material: String,
     pub lod: String,
@@ -104,6 +108,37 @@ fn shader_name(hash: u32) -> String {
     .unwrap_or_else(|| format!("0x{hash:08X}"))
 }
 impl Model {
+    /// Vehicle extras with geometry in this model, in ascending order.
+    pub fn extras(&self) -> std::collections::BTreeSet<u8> {
+        self.meshes
+            .iter()
+            .flat_map(|m| &m.extra_ids)
+            .copied()
+            .filter(|&id| id > 0)
+            .collect()
+    }
+    /// Removes the triangles of hidden extras. A triangle touching a hidden
+    /// extra belongs to that part. Vertices are kept, so bindings stay aligned.
+    pub fn hide_extras(&mut self, hidden: &std::collections::BTreeSet<u8>) {
+        if hidden.is_empty() {
+            return;
+        }
+        for mesh in self.meshes.iter_mut().filter(|m| !m.extra_ids.is_empty()) {
+            let ids = &mesh.extra_ids;
+            mesh.indices = mesh
+                .indices
+                .as_chunks::<3>()
+                .0
+                .iter()
+                .filter(|tri| {
+                    !tri.iter()
+                        .any(|&i| ids.get(i as usize).is_some_and(|id| hidden.contains(id)))
+                })
+                .flatten()
+                .copied()
+                .collect();
+        }
+    }
     pub fn validate(&self) -> Result<()> {
         if self.preview_textures.len() > 256
             || self
@@ -135,6 +170,12 @@ impl Model {
                 && (m.siren_ids.len() != m.positions.len() || m.siren_ids.iter().any(|&id| id > 32))
             {
                 return Err("Invalid siren surface bindings".into());
+            }
+            if !m.extra_ids.is_empty()
+                && (m.extra_ids.len() != m.positions.len()
+                    || m.extra_ids.iter().any(|&id| id > crate::sirens::MAX_EXTRA))
+            {
+                return Err("Invalid vehicle extra bindings".into());
             }
             count += m.indices.len();
             if m.positions.is_empty()
@@ -206,6 +247,7 @@ fn mesh(name: &str, material: &str) -> Mesh {
     Mesh {
         vertex_alpha: vec![],
         siren_ids: vec![],
+        extra_ids: vec![],
         name: name.into(),
         material: material.into(),
         lod: "High".into(),
@@ -309,6 +351,7 @@ pub fn parse_xml(text: &str) -> Result<Model> {
     let doc = xml_document(text)?;
     let mut out = Model::default();
     let mut bone_channels = vec![];
+    let mut bone_extras = vec![];
     let materials: Vec<_> = doc
         .descendants()
         .find(|n| n.has_tag_name("Shaders"))
@@ -398,6 +441,7 @@ pub fn parse_xml(text: &str) -> Result<Model> {
         })();
         match poses.and_then(|p| {
             bone_channels = crate::sirens::bone_channels(&p)?;
+            bone_extras = crate::sirens::bone_extras(&p)?;
             crate::sirens::bone_anchors(&p)
         }) {
             Ok(anchors) => out.sirens = anchors,
@@ -406,6 +450,7 @@ pub fn parse_xml(text: &str) -> Result<Model> {
                 .push(format!("Siren bones unavailable: {error}")),
         }
     }
+    let has_extras = bone_extras.iter().any(|&id| id > 0);
     for vb in doc.descendants().filter(|n| n.has_tag_name("VertexBuffer")) {
         let Some(g) = vb.parent() else { continue };
         let layout = vb
@@ -497,7 +542,8 @@ pub fn parse_xml(text: &str) -> Result<Model> {
                 }
                 m.vertex_alpha.push(alpha.round() as u8);
             }
-            if emissive {
+            if emissive || has_extras {
+                // The bone with the most weight, or None for an unusable blend index.
                 let bone = if let (Some(&w), Some(&i)) =
                     (offsets.get("BlendWeights"), offsets.get("BlendIndices"))
                 {
@@ -506,20 +552,24 @@ pub fn parse_xml(text: &str) -> Result<Model> {
                         .unwrap_or(0);
                     let index = nums[i + slot];
                     if !index.is_finite() || index < 0. || index.fract() != 0. || index > 4095. {
-                        return Err("Invalid XML blend index".into());
-                    }
-                    if palette.is_empty() {
-                        index as usize
+                        None
+                    } else if palette.is_empty() {
+                        Some(index as usize)
                     } else {
-                        *palette
-                            .get(index as usize)
-                            .ok_or("Invalid XML bone palette index")?
+                        palette.get(index as usize).copied()
                     }
                 } else {
-                    rigid_bone
+                    Some(rigid_bone)
                 };
-                m.siren_ids
-                    .push(bone_channels.get(bone).copied().unwrap_or(0));
+                if emissive {
+                    let bone = bone.ok_or("Invalid XML blend index or bone palette index")?;
+                    m.siren_ids
+                        .push(bone_channels.get(bone).copied().unwrap_or(0));
+                }
+                if has_extras {
+                    m.extra_ids
+                        .push(bone.and_then(|b| bone_extras.get(b)).copied().unwrap_or(0));
+                }
             }
             for c in 0..8 {
                 if let Some(&u) = offsets.get(format!("TexCoord{c}").as_str()) {
@@ -873,6 +923,8 @@ fn parse_rsc7_traced(
             &own_bones
         };
         let bone_channels = crate::sirens::bone_channels(bones)?;
+        let bone_extras = crate::sirens::bone_extras(bones)?;
+        let has_extras = bone_extras.iter().any(|&id| id > 0);
         let worlds = crate::sirens::bone_worlds(bones)?;
         let skeleton_drawable = if own_bones.is_empty() { root } else { *d };
         let skin = r.skin_matrices(skeleton_drawable, &worlds)?;
@@ -1034,7 +1086,8 @@ fn parse_rsc7_traced(
                             };
                             m.vertex_alpha.push(alpha);
                         }
-                        if emissive {
+                        if emissive || has_extras {
+                            // The bone with the most weight, or None for a bad palette index.
                             let bone = if let (Some((wo, 8 | 9)), Some((io, 8 | 9))) =
                                 (attrs[1], attrs[2])
                             {
@@ -1043,20 +1096,25 @@ fn parse_rsc7_traced(
                                 let slot = (0..4).max_by_key(|&i| weights[i]).unwrap_or(0);
                                 let index = indices[slot] as usize;
                                 if weights[slot] == 0 {
-                                    rigid_bone
+                                    Some(rigid_bone)
                                 } else if palette.is_empty() {
-                                    index
+                                    Some(index)
                                 } else {
-                                    *palette
-                                        .get(index)
-                                        .ok_or("Invalid vertex bone palette index")?
-                                        as usize
+                                    palette.get(index).map(|&b| b as usize)
                                 }
                             } else {
-                                rigid_bone
+                                Some(rigid_bone)
                             };
-                            m.siren_ids
-                                .push(bone_channels.get(bone).copied().unwrap_or(0));
+                            if emissive {
+                                let bone = bone.ok_or("Invalid vertex bone palette index")?;
+                                m.siren_ids
+                                    .push(bone_channels.get(bone).copied().unwrap_or(0));
+                            }
+                            if has_extras {
+                                m.extra_ids.push(
+                                    bone.and_then(|b| bone_extras.get(b)).copied().unwrap_or(0),
+                                );
+                            }
                         }
                         for c in 0..8 {
                             if let Some((uo, ut)) = attrs[c + 6] {

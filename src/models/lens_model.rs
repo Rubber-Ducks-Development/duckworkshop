@@ -134,7 +134,7 @@ fn patch_model(bytes: &[u8], copies: &Copies) -> Result<Option<Vec<u8>>> {
             .filter(|m| m.is_light_emissive())
             .and_then(|m| copies.get(&m.diffuse_texture.to_ascii_lowercase()));
         let mut parts: BTreeMap<u8, Vec<u16>> = BTreeMap::new();
-        for tri in mesh.indices.chunks_exact(3) {
+        for tri in mesh.indices.as_chunks::<3>().0 {
             let ids = tri
                 .iter()
                 .map(|i| {

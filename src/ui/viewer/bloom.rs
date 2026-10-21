@@ -1,5 +1,13 @@
 //! Blur only visible emissive lens pixels, preserving the vehicle depth buffer.
+//! The lens mask is blurred at several widths at half resolution and the levels
+//! are summed, giving a bright core and a wide halo.
 use super::*;
+
+/// Blur widths, in half-resolution texels per logical point.
+const LEVELS: [f32; 4] = [1., 2., 3.5, 5.5];
+/// Glow added for the summed blur levels, and for the sharp lens core.
+const STRENGTH: f32 = 0.85;
+const CORE: f32 = 0.35;
 
 #[derive(Default)]
 struct Targets {
@@ -22,6 +30,7 @@ impl Targets {
             }
         }
     }
+    /// Full-size scene and lens mask, then half-size blur ping, pong and sum.
     unsafe fn new(gl: &glow::Context, size: [i32; 2]) -> Result<Self> {
         unsafe {
             let mut target = Self {
@@ -44,7 +53,8 @@ impl Targets {
                     size[0],
                     size[1],
                 );
-                for i in 0..3 {
+                for i in 0..5 {
+                    let [width, height] = if i < 2 { size } else { half(size) };
                     let texture = gl.create_texture()?;
                     target.textures.push(texture);
                     gl.bind_texture(glow::TEXTURE_2D, Some(texture));
@@ -52,8 +62,8 @@ impl Targets {
                         glow::TEXTURE_2D,
                         0,
                         glow::RGBA8 as i32,
-                        size[0],
-                        size[1],
+                        width,
+                        height,
                         0,
                         glow::RGBA,
                         glow::UNSIGNED_BYTE,
@@ -103,12 +113,18 @@ impl Targets {
     }
 }
 
+fn half(size: [i32; 2]) -> [i32; 2] {
+    size.map(|n| (n / 2).max(1))
+}
+
 pub(super) struct Bloom {
     program: glow::Program,
     vao: glow::VertexArray,
     vbo: glow::Buffer,
     source: Option<glow::UniformLocation>,
     scene: Option<glow::UniformLocation>,
+    mask: Option<glow::UniformLocation>,
+    strength: Option<glow::UniformLocation>,
     direction: Option<glow::UniformLocation>,
     composite: Option<glow::UniformLocation>,
     targets: Targets,
@@ -125,14 +141,20 @@ impl Bloom {
             };
             let vertex = "attribute vec2 a_position; varying vec2 v_uv; void main(){v_uv=a_position*0.5+0.5;gl_Position=vec4(a_position,0.0,1.0);}";
             let fragment = r#"
-                uniform sampler2D u_source; uniform sampler2D u_scene;
-                uniform vec2 u_direction; uniform int u_composite; varying vec2 v_uv;
+                uniform sampler2D u_source; uniform sampler2D u_scene; uniform sampler2D u_mask;
+                uniform vec2 u_direction; uniform int u_composite; uniform float u_strength;
+                varying vec2 v_uv;
                 void main(){
                     vec3 glow=texture2D(u_source,v_uv).rgb*0.227027;
                     glow+=(texture2D(u_source,v_uv+u_direction*1.384615).rgb+texture2D(u_source,v_uv-u_direction*1.384615).rgb)*0.316216;
                     glow+=(texture2D(u_source,v_uv+u_direction*3.230769).rgb+texture2D(u_source,v_uv-u_direction*3.230769).rgb)*0.070270;
-                    vec4 scene=u_composite==1?texture2D(u_scene,v_uv):vec4(0.0);
-                    gl_FragColor=vec4(scene.rgb+glow,scene.a);
+                    if (u_composite==1) {
+                        vec4 scene=texture2D(u_scene,v_uv);
+                        vec3 core=texture2D(u_mask,v_uv).rgb;
+                        gl_FragColor=vec4(scene.rgb+core*CORE+glow*u_strength,scene.a);
+                    } else {
+                        gl_FragColor=vec4(glow,1.0);
+                    }
                 }"#;
             let program = gl.create_program()?;
             for (kind, prefix, source) in [
@@ -156,7 +178,10 @@ impl Bloom {
                 ),
             ] {
                 let shader = gl.create_shader(kind)?;
-                gl.shader_source(shader, &format!("{header}{precision}{prefix}{source}"));
+                gl.shader_source(
+                    shader,
+                    &format!("{header}{precision}{prefix}#define CORE {CORE:.3}\n{source}"),
+                );
                 gl.compile_shader(shader);
                 if !gl.get_shader_compile_status(shader) {
                     let error = gl.get_shader_info_log(shader);
@@ -187,6 +212,8 @@ impl Bloom {
             Ok(Self {
                 source: gl.get_uniform_location(program, "u_source"),
                 scene: gl.get_uniform_location(program, "u_scene"),
+                mask: gl.get_uniform_location(program, "u_mask"),
+                strength: gl.get_uniform_location(program, "u_strength"),
                 direction: gl.get_uniform_location(program, "u_direction"),
                 composite: gl.get_uniform_location(program, "u_composite"),
                 program,
@@ -225,18 +252,43 @@ impl Bloom {
                 gl.clear(glow::COLOR_BUFFER_BIT);
                 draw(true);
                 gl.disable(glow::DEPTH_TEST);
-                gl.disable(glow::BLEND);
                 gl.use_program(Some(self.program));
                 gl.bind_vertex_array(Some(self.vao));
                 gl.uniform_1_i32(self.source.as_ref(), 0);
                 gl.uniform_1_i32(self.scene.as_ref(), 1);
-                gl.active_texture(glow::TEXTURE0);
-                gl.bind_texture(glow::TEXTURE_2D, Some(self.targets.textures[1]));
-                gl.bind_framebuffer(glow::FRAMEBUFFER, Some(self.targets.buffers[2]));
+                gl.uniform_1_i32(self.mask.as_ref(), 2);
                 gl.uniform_1_i32(self.composite.as_ref(), 0);
-                let blur = 1.7 * info.pixels_per_point;
-                gl.uniform_2_f32(self.direction.as_ref(), blur / size[0] as f32, 0.);
-                gl.draw_arrays(glow::TRIANGLES, 0, 6);
+                gl.uniform_1_f32(self.strength.as_ref(), 1.);
+                let small = half(size);
+                gl.viewport(0, 0, small[0], small[1]);
+                let [mask, ping, pong, sum] = [1, 2, 3, 4].map(|i| self.targets.textures[i]);
+                let [ping_buffer, pong_buffer, sum_buffer] =
+                    [2, 3, 4].map(|i| self.targets.buffers[i]);
+                gl.bind_framebuffer(glow::FRAMEBUFFER, Some(sum_buffer));
+                gl.clear(glow::COLOR_BUFFER_BIT);
+                gl.active_texture(glow::TEXTURE0);
+                let mut source = mask;
+                for width in LEVELS {
+                    let spread = width * info.pixels_per_point;
+                    gl.disable(glow::BLEND);
+                    for (input, output, direction) in [
+                        (source, ping_buffer, [spread / small[0] as f32, 0.]),
+                        (ping, pong_buffer, [0., spread / small[1] as f32]),
+                    ] {
+                        gl.bind_texture(glow::TEXTURE_2D, Some(input));
+                        gl.bind_framebuffer(glow::FRAMEBUFFER, Some(output));
+                        gl.uniform_2_f32(self.direction.as_ref(), direction[0], direction[1]);
+                        gl.draw_arrays(glow::TRIANGLES, 0, 6);
+                    }
+                    // Each wider level adds to the sum, keeping the tighter glow.
+                    gl.enable(glow::BLEND);
+                    gl.blend_func(glow::ONE, glow::ONE);
+                    gl.bind_texture(glow::TEXTURE_2D, Some(pong));
+                    gl.bind_framebuffer(glow::FRAMEBUFFER, Some(sum_buffer));
+                    gl.uniform_2_f32(self.direction.as_ref(), 0., 0.);
+                    gl.draw_arrays(glow::TRIANGLES, 0, 6);
+                    source = pong;
+                }
                 gl.bind_framebuffer(glow::FRAMEBUFFER, framebuffer);
                 gl.viewport(
                     previous_viewport[0],
@@ -247,12 +299,15 @@ impl Bloom {
                 if scissor {
                     gl.enable(glow::SCISSOR_TEST);
                 }
+                gl.active_texture(glow::TEXTURE2);
+                gl.bind_texture(glow::TEXTURE_2D, Some(mask));
                 gl.active_texture(glow::TEXTURE1);
                 gl.bind_texture(glow::TEXTURE_2D, Some(self.targets.textures[0]));
                 gl.active_texture(glow::TEXTURE0);
-                gl.bind_texture(glow::TEXTURE_2D, Some(self.targets.textures[2]));
+                gl.bind_texture(glow::TEXTURE_2D, Some(sum));
                 gl.uniform_1_i32(self.composite.as_ref(), 1);
-                gl.uniform_2_f32(self.direction.as_ref(), 0., blur / size[1] as f32);
+                gl.uniform_1_f32(self.strength.as_ref(), STRENGTH);
+                gl.uniform_2_f32(self.direction.as_ref(), 0., 0.);
                 gl.enable(glow::BLEND);
                 gl.blend_func(glow::ONE, glow::ONE_MINUS_SRC_ALPHA);
                 gl.draw_arrays(glow::TRIANGLES, 0, 6);
@@ -270,10 +325,10 @@ impl Bloom {
             } else {
                 gl.disable(glow::SCISSOR_TEST);
             }
-            gl.active_texture(glow::TEXTURE1);
-            gl.bind_texture(glow::TEXTURE_2D, None);
-            gl.active_texture(glow::TEXTURE0);
-            gl.bind_texture(glow::TEXTURE_2D, None);
+            for unit in [glow::TEXTURE2, glow::TEXTURE1, glow::TEXTURE0] {
+                gl.active_texture(unit);
+                gl.bind_texture(glow::TEXTURE_2D, None);
+            }
             gl.bind_vertex_array(None);
             gl.bind_renderbuffer(glow::RENDERBUFFER, None);
             gl.depth_mask(true);

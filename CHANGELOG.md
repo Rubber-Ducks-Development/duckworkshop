@@ -2,6 +2,12 @@
 
 ## Local development 0.3.6-dev.4 (Early Access)
 
+- Show and hide vehicle extras in the Lightboard 3D preview. Geometry on each
+  `extra_N` bone, including lenses on child siren bones, is detected for native
+  YFT and CodeWalker XML models and listed as Extras checkboxes.
+- Add a Bloom checkbox to the 3D preview. Bloom is now a visible multi-level
+  halo around lit lenses (previously a ~5 px blur) and also controls the glow
+  rings of sirens without modeled lenses.
 - Fix siren lenses scattering around some vehicles in the 3D preview. The carcols
   delta now replaces a siren bone's authored rotation, as in game, instead of
   adding to it, so lenses modeled on turned bones (angled corner and side lights)

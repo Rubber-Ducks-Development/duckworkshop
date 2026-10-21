@@ -100,10 +100,16 @@ impl Workbench {
         }
     }
     pub(super) fn prepare_siren_scene(&mut self) {
-        if self.siren_scene.is_some() && self.siren_version == self.scene_version {
+        if self.siren_scene.is_some()
+            && self.siren_version == self.scene_version
+            && self.siren_hidden_extras == self.session.siren_preview.hidden_extras
+        {
             return;
         }
-        let full = self.model.clone().unwrap_or_else(sirens::schematic_model);
+        let mut full = self.model.clone().unwrap_or_else(sirens::schematic_model);
+        self.siren_extras = full.extras().into_iter().collect();
+        let hidden = self.session.siren_preview.hidden_extras.clone();
+        full.hide_extras(&hidden);
         self.siren_embedded.clear();
         {
             use base64::Engine;
@@ -140,14 +146,16 @@ impl Workbench {
                 .into(),
             ..Default::default()
         };
+        self.siren_builds += 1;
         self.siren_scene = viewer::build_vehicle(
             &full,
             &opt,
             self.model.is_none() || self.z_up,
-            self.scene_version,
+            self.siren_builds,
         )
         .map(std::sync::Arc::new);
         self.siren_version = self.scene_version;
+        self.siren_hidden_extras = hidden;
     }
     pub(super) fn focus_siren_lightbar(&mut self) {
         self.prepare_siren_scene();
@@ -236,6 +244,8 @@ impl Workbench {
             ));
             ui.checkbox(&mut self.session.siren_preview.labels, "Siren labels");
             ui.checkbox(&mut self.session.siren_preview.ground_glow, "Ground glow");
+            ui.checkbox(&mut self.session.siren_preview.bloom, "Bloom")
+                .on_hover_text("Glow and halo around lit siren lenses");
             ui.checkbox(&mut self.session.siren_preview.night, "Night");
             if ui.small_button("Fit").clicked() {
                 self.siren_camera = Self::siren_fit_camera();
@@ -267,6 +277,30 @@ impl Workbench {
             );
         });
         self.prepare_siren_scene();
+        if !self.siren_extras.is_empty() {
+            ui.horizontal_wrapped(|ui| {
+                ui.label("Extras")
+                    .on_hover_text("Show or hide the vehicle's extra_N parts in this preview");
+                for &id in &self.siren_extras {
+                    let mut shown = !self.session.siren_preview.hidden_extras.contains(&id);
+                    if ui.checkbox(&mut shown, id.to_string()).changed() {
+                        if shown {
+                            self.session.siren_preview.hidden_extras.remove(&id);
+                        } else {
+                            self.session.siren_preview.hidden_extras.insert(id);
+                        }
+                    }
+                }
+                if ui.small_button("All").clicked() {
+                    self.session.siren_preview.hidden_extras.clear();
+                }
+                if ui.small_button("None").clicked() {
+                    self.session.siren_preview.hidden_extras =
+                        self.siren_extras.iter().copied().collect();
+                }
+            });
+            self.prepare_siren_scene();
+        }
         let markers = sirens::markers(
             self.model.as_ref(),
             &self.session.pattern,
@@ -516,6 +550,7 @@ impl Workbench {
                 paint: [165, 172, 181],
                 lights,
                 siren_poses,
+                bloom: self.session.siren_preview.bloom,
             },
         ));
         let visible: Vec<_> = markers
@@ -544,7 +579,7 @@ impl Workbench {
                 Color32::from_gray(75)
             };
             let r = (if marker.active { 4.5 } else { 2.5 }) * self.session.siren_preview.scale;
-            if marker.active {
+            if marker.active && self.session.siren_preview.bloom {
                 for ring in (1..=4).rev() {
                     p.circle_filled(
                         pos,

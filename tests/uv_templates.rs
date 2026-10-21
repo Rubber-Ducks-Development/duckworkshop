@@ -7,6 +7,7 @@ fn quad(material: &str) -> Mesh {
     Mesh {
         vertex_alpha: vec![],
         siren_ids: vec![],
+        extra_ids: vec![],
         name: material.into(),
         material: material.into(),
         lod: "High".into(),

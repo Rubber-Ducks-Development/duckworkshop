@@ -37,7 +37,7 @@ fn triangles(model: &models::Model, copies: &BTreeMap<String, String>) -> BTreeM
     let mut out = BTreeMap::new();
     for mesh in &model.meshes {
         let material = model.material_info.get(&mesh.material);
-        for tri in mesh.indices.chunks_exact(3) {
+        for tri in mesh.indices.as_chunks::<3>().0 {
             let mut key = Vec::new();
             key.extend(mesh.lod.as_bytes());
             key.push(0);
@@ -216,7 +216,7 @@ fn native_independent_lenses_preserve_other_lenses_and_model_data() {
                     .diffuse_texture
                     .to_ascii_lowercase(),
             );
-            for tri in mesh.indices.chunks_exact(3) {
+            for tri in mesh.indices.as_chunks::<3>().0 {
                 assert!(colors.contains_key(&mesh.siren_ids[tri[0] as usize]));
                 changed_triangles += 1;
             }

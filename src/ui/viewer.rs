@@ -237,6 +237,8 @@ pub(super) struct Frame {
     pub lights: Vec<PreviewLight>,
     /// Preview-space pose of each siren's lens surfaces, lit or not.
     pub siren_poses: Vec<(u8, Mat4)>,
+    /// Glow around lit siren lenses.
+    pub bloom: bool,
     pub siren_surfaces: bool,
     pub night: bool,
 }
@@ -407,7 +409,11 @@ impl Gpu {
                     mask,
                 )
             };
-            if frame.siren_surfaces && !frame.lights.is_empty() && gl.version().major >= 3 {
+            if frame.bloom
+                && frame.siren_surfaces
+                && !frame.lights.is_empty()
+                && gl.version().major >= 3
+            {
                 if self.bloom.is_none() {
                     match bloom::Bloom::new(gl) {
                         Ok(bloom) => self.bloom = Some(bloom),
@@ -953,6 +959,7 @@ mod tests {
         let mesh = |material: &str, z: f32| duck_workshop::models::Mesh {
             vertex_alpha: vec![],
             siren_ids: vec![],
+            extra_ids: vec![],
             name: material.into(),
             material: material.into(),
             lod: "High".into(),

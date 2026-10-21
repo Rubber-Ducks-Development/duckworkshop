@@ -251,6 +251,65 @@ fn native_lens_vertices_follow_weighted_and_rigid_siren_bones() {
 }
 
 #[test]
+fn native_vertices_record_the_vehicle_extra_above_their_bone() {
+    // The lens fixture above, with siren7's parent bone named extra_3.
+    let fixture = rewrite_rsc7(&rsc_fixture("yft"), |d| {
+        let ptr = |d: &mut [u8], o: usize, p: u64| d[o..o + 8].copy_from_slice(&p.to_le_bytes());
+        ptr(d, 0x158, 0x50000c00);
+        ptr(d, 0xc20, 0x50000d00);
+        d[0xc5e..0xc60].copy_from_slice(&2u16.to_le_bytes());
+        for b in [0xd00, 0xd50] {
+            d[b + 12..b + 16].copy_from_slice(&1f32.to_le_bytes());
+            for o in [0x20, 0x24, 0x28] {
+                d[b + o..b + o + 4].copy_from_slice(&1f32.to_le_bytes());
+            }
+        }
+        d[0xd32..0xd34].copy_from_slice(&(-1i16).to_le_bytes());
+        ptr(d, 0xd38, 0x50000e40);
+        d[0xe40..0xe48].copy_from_slice(b"extra_3 ");
+        ptr(d, 0xd88, 0x50000e00);
+        d[0xe00..0xe07].copy_from_slice(b"siren7\0");
+        ptr(d, 0x150, 0x50000f00);
+        ptr(d, 0xf10, 0x50000f40);
+        d[0xf18..0xf1a].copy_from_slice(&8u16.to_le_bytes());
+        ptr(d, 0xf78, 0x50000f80);
+        d[0xf88..0xf8c].copy_from_slice(&0xe515a6e7u32.to_le_bytes());
+        ptr(d, 0x368, 0x50001000);
+        d[0x372..0x374].copy_from_slice(&2u16.to_le_bytes());
+        d[0x1000..0x1002].copy_from_slice(&1u16.to_le_bytes());
+        d[0x408..0x40a].copy_from_slice(&28u16.to_le_bytes());
+        d[0x600..0x604]
+            .copy_from_slice(&((1u32 << 0) | (1 << 1) | (1 << 2) | (1 << 6)).to_le_bytes());
+        ptr(d, 0x608, 6 | (9 << 4) | (9 << 8) | (5 << 24));
+        for v in 0..3 {
+            let o = 8192 + v * 28;
+            d[o..o + 28].fill(0);
+            d[o + 14] = 255;
+            d[o + 20..o + 24].copy_from_slice(&0.5f32.to_le_bytes());
+        }
+        d[8192 + 28..8192 + 32].copy_from_slice(&1f32.to_le_bytes());
+        d[8192 + 56 + 4..8192 + 56 + 8].copy_from_slice(&1f32.to_le_bytes());
+    });
+    let model = models::parse_rsc7(&fixture, "yft").unwrap();
+    assert_eq!(model.meshes[0].siren_ids, [7, 7, 7]);
+    assert_eq!(model.meshes[0].extra_ids, [3, 3, 3]);
+    assert_eq!(model.extras().into_iter().collect::<Vec<_>>(), [3]);
+    let round: models::Model =
+        serde_json::from_value(serde_json::to_value(&model).unwrap()).unwrap();
+    assert_eq!(round.meshes[0].extra_ids, [3, 3, 3]);
+    let mut shown = model.clone();
+    shown.hide_extras(&[1, 2].into());
+    assert_eq!(shown.meshes[0].indices, model.meshes[0].indices);
+    let mut hidden = model.clone();
+    hidden.hide_extras(&[3].into());
+    assert!(hidden.meshes[0].indices.is_empty());
+    assert_eq!(hidden.meshes[0].positions, model.meshes[0].positions);
+    let mut bad = model;
+    bad.meshes[0].extra_ids.pop();
+    assert!(bad.validate().is_err());
+}
+
+#[test]
 fn native_material_names_resolve_the_livery_sampler() {
     let fixture = rewrite_rsc7(&rsc_fixture("yft"), |data| {
         let ptr = |data: &mut [u8], offset: usize, value: u64| {
@@ -759,6 +818,7 @@ fn mapped_fixture() -> models::Model {
         let mut m = models::Mesh {
             vertex_alpha: vec![],
             siren_ids: vec![],
+            extra_ids: vec![],
             name: name.into(),
             material: "Livery".into(),
             lod: "High".into(),

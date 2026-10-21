@@ -50,6 +50,8 @@ impl Workbench {
         self.blink_selected = 0;
         self.blink_brush = 0;
         self.session.siren_preview.scale = 1.;
+        // Extras are numbered per vehicle; start the new one with all of them shown.
+        self.session.siren_preview.hidden_extras.clear();
         for (slot, source) in self.session.metas.iter_mut().zip(imported.metas) {
             *slot = source.unwrap_or_default();
         }
